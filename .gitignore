@@ -1,0 +1,11 @@
+.history
+.vscode
+_comandi.txt
+.env
+note.md
+idee_funzionalita.md
+idee_funzionalita copy.md
+logs/
+__pycache__/
+*.pyc
+venv/
