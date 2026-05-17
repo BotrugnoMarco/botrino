@@ -40,6 +40,7 @@ class Botrino(commands.Bot):
         self.AFK_MOVE_CHANNEL_ID = self.AFK_CHANNEL_IDS[0] if self.AFK_CHANNEL_IDS else None
         self.AFK_MOVE_TIMEOUT_MINUTES = int(os.getenv("AFK_MOVE_TIMEOUT_MINUTES", 30))
         self.AFK_EXCLUDED_USER_IDS = [int(uid) for uid in os.getenv("AFK_EXCLUDED_USER_IDS", "").split(',') if uid]
+        self.AFK_EXEMPT_CHANNEL_IDS = [int(cid) for cid in os.getenv("AFK_EXEMPT_CHANNEL_IDS", "").split(',') if cid]
         self.BOT_TZ = pytz.timezone(os.getenv("ZONE", "UTC"))
         
         # Costanti per il sistema di XP
