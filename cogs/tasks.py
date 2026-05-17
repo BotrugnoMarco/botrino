@@ -246,11 +246,14 @@ class ScheduledTasks(commands.Cog):
             # Controlla solo utenti mutati che hanno un timestamp di inizio mute
             if not session_data.get('is_muted') or not session_data.get('mute_start_time'):
                 continue
-            
+
             duration_muted = (now - session_data['mute_start_time']).total_seconds()
             if duration_muted > timeout_seconds:
                 member = afk_channel.guild.get_member(user_id)
                 if member and member.voice and member.voice.channel.id != afk_channel.id:
+                    # Salta i canali esenti dall'AFK
+                    if member.voice.channel.id in self.bot.AFK_EXEMPT_CHANNEL_IDS:
+                        continue
                     try:
                         reason = f"Inattività (mutato per >{self.bot.AFK_MOVE_TIMEOUT_MINUTES} min)."
                         await member.move_to(afk_channel, reason=reason)
