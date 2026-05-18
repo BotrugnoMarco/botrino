@@ -656,6 +656,10 @@ class ActivityEvents(commands.Cog):
             # Premia chi ha reagito
             await self.update_xp_and_level(reactor.id, payload.guild_id, self.bot.XP_PER_REACTION)
 
+            # Premia l'autore del messaggio che ha ricevuto la reazione
+            self.bot.cursor.execute(queries.insert_user_query, (author.id, author.name, getattr(author, 'nick', None)))
+            await self.update_xp_and_level(author.id, payload.guild_id, self.bot.XP_FOR_REACTION_RECEIVED)
+
             # Aggiorna la striscia giornaliera (IMPORTANTE per evitare reset XP giornaliero)
             await self.update_streak(reactor.id)
 
