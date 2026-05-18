@@ -47,6 +47,7 @@ class Botrino(commands.Bot):
         self.XP_PER_MINUTE = int(os.getenv("XP_PER_MINUTE", 3))
         self.XP_PER_MESSAGE = int(os.getenv("XP_PER_MESSAGE", 2))
         self.XP_PER_REACTION = int(os.getenv("XP_PER_REACTION", 1))
+        self.XP_FOR_REACTION_RECEIVED = int(os.getenv("XP_FOR_REACTION_RECEIVED", 2))
         self.BASE_XP_FOR_LEVEL_UP = int(os.getenv("BASE_XP_FOR_LEVEL_UP", 250))
         self.MESSAGE_COOLDOWN = int(os.getenv("MESSAGE_COOLDOWN", 30))
         
