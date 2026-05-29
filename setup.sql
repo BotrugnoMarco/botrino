@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS user_badges (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (badge_id) REFERENCES badges(id) ON DELETE CASCADE
 );
+-- Tabella per il tracciamento degli utilizzi della soundboard
+CREATE TABLE IF NOT EXISTS soundboard_usage (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    channel_id BIGINT NOT NULL,
+    sound_id BIGINT NOT NULL,
+    sound_name VARCHAR(100) NOT NULL DEFAULT 'Sconosciuto',
+    used_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (channel_id) REFERENCES channels(id),
+    INDEX (used_at)
+);
 -- Pulizia dei dati vecchi (opzionale)
 -- Rimuovi le sessioni di voice_activity che non hanno leave_time e sono più vecchie di 2 giorni
 -- DELETE FROM voice_activity WHERE leave_time IS NULL AND join_time < NOW() - INTERVAL 2 DAY;

@@ -51,7 +51,7 @@ def format_leaderboard(rows: list[dict], formatter: callable) -> str:
         
     return leaderboard_text
 
-async def send_report_embed(destination, title: str, user_rows: list[dict], channel_report_rows: list[dict] = None, color: int = 0x2E8B57, kofi_username: str = None):
+async def send_report_embed(destination, title: str, user_rows: list[dict], channel_report_rows: list[dict] = None, soundboard_rows: list[dict] = None, color: int = 0x2E8B57, kofi_username: str = None):
     """
     Costruisce e invia un embed formattato per i report (giornalieri/settimanali).
     Migliorato con podio, statistiche totali e formattazione visiva.
@@ -59,7 +59,7 @@ async def send_report_embed(destination, title: str, user_rows: list[dict], chan
     try:
         embed = discord.Embed(title=f"📊 {title}", color=color)
         
-        if not user_rows and not channel_report_rows:
+        if not user_rows and not channel_report_rows and not soundboard_rows:
             embed.description = "💤 Nessuna attività registrata per questo periodo."
         else:
             # --- Statistiche Totali ---
@@ -113,7 +113,21 @@ async def send_report_embed(destination, title: str, user_rows: list[dict], chan
                     if len(channel_text) > 1024:
                         channel_text = channel_text[:1020] + "..."
                     embed.add_field(name="📡 Canali più Attivi", value=channel_text, inline=False)
-        
+
+            # --- Sezione Soundboard ---
+            if soundboard_rows:
+                soundboard_text = ""
+                for i, row in enumerate(soundboard_rows):
+                    count = row.get('use_count', 0)
+                    if count > 0:
+                        name = row.get('sound_name', 'Sconosciuto')
+                        prefix = ["🥇", "🥈", "🥉"][i] if i < 3 else "🔹"
+                        soundboard_text += f"{prefix} **{name}** — `{count} {'volta' if count == 1 else 'volte'}`\n"
+                if soundboard_text:
+                    if len(soundboard_text) > 1024:
+                        soundboard_text = soundboard_text[:1020] + "..."
+                    embed.add_field(name="🎵 Soundboard più usata", value=soundboard_text, inline=False)
+
         # Footer e Timestamp
         embed.set_footer(text="Report generato automaticamente • Botrino")
         embed.timestamp = discord.utils.utcnow()

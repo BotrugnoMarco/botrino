@@ -198,6 +198,25 @@ insert_channel_query = """
 """
 
 
+# --- SOUNDBOARD QUERIES ---
+
+# Inserisce un evento di utilizzo soundboard.
+insert_soundboard_usage_query = """
+    INSERT INTO soundboard_usage (user_id, channel_id, sound_id, sound_name, used_at)
+    VALUES (%s, %s, %s, %s, %s)
+"""
+
+# Top suoni usati in un dato intervallo, ordinati per numero di utilizzi.
+soundboard_report_query = """
+    SELECT sound_name, COUNT(*) AS use_count
+    FROM soundboard_usage
+    WHERE used_at >= %s AND used_at < %s
+    GROUP BY sound_id, sound_name
+    ORDER BY use_count DESC
+    LIMIT 10
+"""
+
+
 # --- UTILITY QUERIES ---
 
 # Query leggera per mantenere attiva la connessione al database.
