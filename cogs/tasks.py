@@ -89,9 +89,15 @@ async def generate_report(bot, channel: discord.TextChannel, title: str, start_d
         user_rows = sorted(user_report.values(), key=lambda x: x['total_secs'], reverse=True)
         channel_rows = sorted(channel_report.values(), key=lambda x: x['total_activity_seconds'], reverse=True)
 
+        # Dati soundboard per il periodo
+        bot.cursor.execute(queries.soundboard_report_query, (start_date, end_date))
+        soundboard_rows = bot.cursor.fetchall()
+
         await send_report_embed(
             channel, title, user_rows,
-            channel_report_rows=channel_rows, color=bot.PRIMARY_COLOR,
+            channel_report_rows=channel_rows,
+            soundboard_rows=soundboard_rows,
+            color=bot.PRIMARY_COLOR,
             kofi_username=bot.KOFI_USERNAME
         )
     except Exception as e:
