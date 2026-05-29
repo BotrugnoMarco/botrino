@@ -117,6 +117,10 @@ async def on_close():
     logging.info("Spegnimento completato.")
 
 @bot.event
+async def on_error(event, *args, **kwargs):
+    logging.error(f"Errore non gestito nell'evento '{event}'", exc_info=True)
+
+@bot.event
 async def on_command_error(ctx, error):
     """
     Gestore di errori globale per i comandi.
