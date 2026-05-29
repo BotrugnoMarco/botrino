@@ -692,12 +692,16 @@ class ActivityEvents(commands.Cog):
                 logging.error(f"Errore durante l'aggiornamento del nome del canale {before.name}: {e}")
 
     @commands.Cog.listener()
-    async def on_voice_channel_effect(self, channel, member, _emoji, sound_id, _sound_volume, _animation_type, _animation_id):
+    async def on_voice_channel_effect(self, effect):
         """
         Traccia ogni utilizzo della soundboard nei canali vocali.
         """
-        if sound_id is None or member is None or member.bot:
+        if effect.sound_id is None or effect.member is None or effect.member.bot:
             return
+
+        channel = effect.channel
+        member = effect.member
+        sound_id = effect.sound_id
 
         # Prova a risolvere il nome del suono dalla cache della guild
         sound_name = f"Suono #{sound_id}"
