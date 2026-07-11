@@ -8,7 +8,7 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta, time
 import logging
 import queries
-from utils.formatters import send_report_embed
+from utils.formatters import send_report_embed, build_records_embed
 
 def merge_intervals(intervals: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
     """
@@ -183,6 +183,15 @@ class ScheduledTasks(commands.Cog):
                             continue
                         
                         session_data['total_duration'] += duration_seconds
+
+                        # Accredita il tempo notturno di questo segmento PRIMA di resettare
+                        # last_update, altrimenti la porzione notturna verrebbe persa
+                        # (il tempo notturno veniva calcolato solo all'uscita/mute/spegnimento).
+                        night_seconds = activity_cog.calculate_night_duration(session_data['last_update'], now)
+                        if night_seconds > 0:
+                            self.bot.cursor.execute(queries.update_night_voice_seconds_query, (night_seconds, user_id))
+                            self.bot.db.commit()
+
                         await activity_cog.update_xp_and_level(user_id, guild_id, xp_to_add)
                         session_data['last_update'] = now # Resetta il timer
             except Exception as e:
@@ -230,6 +239,12 @@ class ScheduledTasks(commands.Cog):
         end_date = datetime.combine(end_of_last_week, time.min, tzinfo=self.bot.BOT_TZ)
 
         await generate_report(self.bot, channel, "Report Settimanale", start_date, end_date)
+
+        # Dopo il report settimanale, mostra anche la Hall of Fame dei record del server.
+        try:
+            await channel.send(embed=build_records_embed(self.bot))
+        except Exception as e:
+            logging.error(f"Errore nell'invio dei record dopo il report settimanale: {e}", exc_info=True)
 
     @tasks.loop(minutes=1.0)
     async def check_afk_users(self):

@@ -65,6 +65,12 @@ INSERT IGNORE INTO user_badges (user_id, badge_id)
 VALUES (%s, %s);
 """
 
+# Query per ottenere gli ID dei badge posseduti da un utente
+get_user_badge_ids_query = "SELECT badge_id FROM user_badges WHERE user_id = %s"
+
+# Query per revocare un badge a un utente
+remove_badge_from_user_query = "DELETE FROM user_badges WHERE user_id = %s AND badge_id = %s"
+
 # Query per inserire un nuovo tipo di badge (usata per il setup iniziale)
 insert_badge_query = """
 INSERT INTO badges (id, name, description, icon, check_value)
@@ -136,6 +142,38 @@ get_record_voice_duration_query = """
     LIMIT 1
 """
 
+# Detentore del record di tempo in vocale notturno (🦉 Re della Notte)
+get_record_night_voice_query = """
+    SELECT id, username, nickname, night_voice_seconds
+    FROM users
+    ORDER BY night_voice_seconds DESC
+    LIMIT 1
+"""
+
+# Detentore del record di tempo TOTALE in vocale (🎙️ Signore del Vocale)
+get_record_total_voice_query = """
+    SELECT id, username, nickname, voice_seconds
+    FROM users
+    ORDER BY voice_seconds DESC
+    LIMIT 1
+"""
+
+# Detentore del record di messaggi inviati (💬 Messaggero Supremo)
+get_record_message_count_query = """
+    SELECT id, username, nickname, message_count
+    FROM users
+    ORDER BY message_count DESC
+    LIMIT 1
+"""
+
+# Detentore del record di striscia di attività (🔥 Streak Record)
+get_record_streak_query = """
+    SELECT id, username, nickname, activity_streak
+    FROM users
+    ORDER BY activity_streak DESC
+    LIMIT 1
+"""
+
 # Conta il numero totale di utenti
 get_user_count_query = "SELECT COUNT(*) as count FROM users"
 
@@ -153,6 +191,28 @@ increment_message_count_query = """
 # Aggiorna il tempo totale in vocale notturno.
 update_night_voice_seconds_query = """
     UPDATE users SET night_voice_seconds = night_voice_seconds + %s WHERE id = %s
+"""
+
+# Recupera tutte le sessioni vocali concluse, ordinate per utente e orario.
+# Usata dal comando admin di ricalcolo delle statistiche.
+get_all_closed_sessions_query = """
+    SELECT user_id, join_time, leave_time, duration_seconds
+    FROM voice_activity
+    WHERE leave_time IS NOT NULL
+    ORDER BY user_id, join_time
+"""
+
+# Riscrive (valore assoluto) le statistiche di attività ricalcolate di un utente.
+update_recomputed_stats_query = """
+    UPDATE users
+    SET voice_seconds = %s, night_voice_seconds = %s, max_daily_xp = %s
+    WHERE id = %s
+"""
+
+# Valori correnti rilevanti di tutti gli utenti (per l'anteprima del ricalcolo).
+get_all_users_stats_query = """
+    SELECT id, username, nickname, voice_seconds, night_voice_seconds, daily_xp, max_daily_xp
+    FROM users
 """
 
 # Incrementa il conteggio delle reazioni di un utente.

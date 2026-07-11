@@ -4,6 +4,7 @@ come durate temporali e classifiche, per una visualizzazione pulita su Discord.
 """
 import discord
 import logging
+import queries
 
 def format_duration(total_seconds: float) -> str:
     """
@@ -30,6 +31,20 @@ def format_duration(total_seconds: float) -> str:
         
     return " ".join(parts) if parts else "0s"
 
+def get_effective_streak(activity_streak: int, last_activity_date, today) -> int:
+    """
+    Restituisce la striscia di attività "reale" alla data odierna.
+
+    La streak memorizzata (activity_streak) viene ricalcolata solo quando l'utente
+    compie un'attività: per un utente inattivo resta congelata sull'ultimo valore e
+    quindi risulta sovrastimata. Se l'ultima attività è più vecchia di ieri la streak
+    è di fatto interrotta e va mostrata come 0; se è di oggi o ieri è ancora viva.
+    """
+    if not last_activity_date or not activity_streak:
+        return 0
+    gap = (today - last_activity_date).days
+    return activity_streak if gap <= 1 else 0
+
 def format_leaderboard(rows: list[dict], formatter: callable) -> str:
     """
     Formatta una lista di righe del database in una stringa di classifica.
@@ -50,6 +65,46 @@ def format_leaderboard(rows: list[dict], formatter: callable) -> str:
         leaderboard_text += f"{rank_emoji} **{display_name}** (Lvl. {level})\n> {details}\n\n"
         
     return leaderboard_text
+
+def build_records_embed(bot) -> discord.Embed:
+    """
+    Costruisce l'embed "Hall of Fame" con tutti i record del server, calcolati al volo.
+    Riusato sia dal comando !records sia dal report settimanale.
+    """
+    embed = discord.Embed(
+        title="🏆 Hall of Fame - Record del Server",
+        description="Ecco i record attuali da battere!",
+        color=bot.PRIMARY_COLOR
+    )
+
+    def _add_record(name, query, value_key, formatter=None, suffix=""):
+        try:
+            bot.cursor.execute(query)
+            row = bot.cursor.fetchone()
+        except Exception as e:
+            logging.error(f"Errore nel recupero del record '{name}': {e}", exc_info=True)
+            row = None
+
+        value = row[value_key] if row and row.get(value_key) is not None else 0
+        if value and value > 0:
+            holder = row['nickname'] or row['username']
+            shown = formatter(value) if formatter else f"{value}{suffix}"
+            embed.add_field(name=name, value=f"**{shown}**\nDetenuto da: **{holder}**", inline=True)
+        else:
+            embed.add_field(name=name, value="Nessun record stabilito.", inline=True)
+
+    _add_record("⚡ Max XP in un giorno", queries.get_record_daily_xp_query, 'max_daily_xp', suffix=" XP")
+    _add_record("⏳ Sessione Vocale più lunga", queries.get_record_voice_duration_query, 'duration_seconds', formatter=format_duration)
+    _add_record("🦉 Re della Notte", queries.get_record_night_voice_query, 'night_voice_seconds', formatter=format_duration)
+    _add_record("🎙️ Signore del Vocale", queries.get_record_total_voice_query, 'voice_seconds', formatter=format_duration)
+    _add_record("💬 Messaggero Supremo", queries.get_record_message_count_query, 'message_count', suffix=" messaggi")
+    _add_record("🔥 Streak Record", queries.get_record_streak_query, 'activity_streak', formatter=lambda v: f"{v} giorni")
+
+    if bot.KOFI_USERNAME:
+        embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{bot.KOFI_USERNAME})", inline=False)
+
+    return embed
+
 
 async def send_report_embed(destination, title: str, user_rows: list[dict], channel_report_rows: list[dict] = None, soundboard_rows: list[dict] = None, color: int = 0x2E8B57, kofi_username: str = None):
     """

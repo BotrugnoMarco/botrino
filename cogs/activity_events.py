@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, time
 import logging
 import queries
 from utils.xp_utils import calculate_xp_for_level_up
+from utils.formatters import format_duration
 
 
 class ActivityEvents(commands.Cog):
@@ -29,15 +30,15 @@ class ActivityEvents(commands.Cog):
     def calculate_night_duration(self, start_time: datetime, end_time: datetime) -> int:
         """
         Calcola quanti secondi dell'intervallo [start_time, end_time] ricadono
-        nella fascia oraria notturna (01:00 - 05:00).
+        nella fascia oraria notturna (00:00 - 05:00).
         """
         total_night_seconds = 0
         current = start_time
-        
+
         # Itera giorno per giorno se l'intervallo attraversa la mezzanotte
         while current < end_time:
             # Definisci l'inizio e la fine della notte per il giorno corrente
-            night_start = current.replace(hour=1, minute=0, second=0, microsecond=0)
+            night_start = current.replace(hour=0, minute=0, second=0, microsecond=0)
             night_end = current.replace(hour=5, minute=0, second=0, microsecond=0)
             
             # Se siamo già oltre le 05:00, passiamo alla notte del giorno dopo
@@ -415,31 +416,68 @@ class ActivityEvents(commands.Cog):
                     logging.info(f"{member.name} si è smutato. Accumulo XP ripreso.")
                 session_data['is_muted'] = is_now_muted
 
+    async def _send_welcome_message(self, member) -> bool:
+        """
+        Costruisce e invia il messaggio di benvenuto per un membro nel canale di benvenuto.
+        Restituisce True se inviato, False se il canale non è configurato/trovato.
+        """
+        channel = self.bot.get_channel(self.bot.WELCOME_CHANNEL_ID)
+        if not channel:
+            return False
+
+        embed = discord.Embed(
+            title=f"Benvenuto/a {member.name}!",
+            description=f"Ciao {member.mention}, benvenuto/a nel Drunken's Server! L’oste ti porge un boccale pieno 🍺...",
+            color=self.bot.PRIMARY_COLOR
+        )
+        embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+
+        if self.bot.KOFI_USERNAME:
+            embed.description += f"\n\n[☕ Supporta il bot](https://ko-fi.com/{self.bot.KOFI_USERNAME})"
+
+        embed.set_footer(text=f"Sei il {member.guild.member_count}° membro!")
+        await channel.send(embed=embed)
+        return True
+
     @commands.Cog.listener()
     async def on_member_join(self, member):
         """
         Invia un messaggio di benvenuto quando un nuovo utente si unisce al server.
         """
         if member.bot: return
-        
+
         # Aggiunge l'utente al database se non esiste
         self.bot.cursor.execute(queries.insert_user_query, (member.id, member.name, member.nick))
         self.bot.db.commit()
-        
-        channel = self.bot.get_channel(self.bot.WELCOME_CHANNEL_ID)
-        if channel:
-            embed = discord.Embed(
-                title=f"Benvenuto/a {member.name}!",
-                description=f"Ciao {member.mention}, benvenuto/a nel Drunken's Server! L’oste ti porge un boccale pieno 🍺...",
-                color=self.bot.PRIMARY_COLOR
-            )
-            embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
-            
-            if self.bot.KOFI_USERNAME:
-                embed.description += f"\n\n[☕ Supporta il bot](https://ko-fi.com/{self.bot.KOFI_USERNAME})"
-            
-            embed.set_footer(text=f"Sei il {member.guild.member_count}° membro!")
-            await channel.send(embed=embed)
+
+        await self._send_welcome_message(member)
+
+    @commands.command(name='benvenuto', help="(Admin) Invia (o re-invia) il messaggio di benvenuto a uno o più utenti.")
+    @commands.has_permissions(administrator=True)
+    async def benvenuto(self, ctx, *members: discord.Member):
+        """
+        Invia manualmente il benvenuto a uno o più membri. Utile per rimediare quando il
+        bot era spento all'ingresso di un nuovo utente.
+        Uso: !benvenuto @utente [@utente2 ...]
+        """
+        if not members:
+            await ctx.send("Uso: `!benvenuto @utente [@utente2 ...]`")
+            return
+
+        sent = 0
+        for member in members:
+            if member.bot:
+                continue
+            # Assicura che l'utente sia nel DB (come farebbe on_member_join)
+            self.bot.cursor.execute(queries.insert_user_query, (member.id, member.name, member.nick))
+            if await self._send_welcome_message(member):
+                sent += 1
+        self.bot.db.commit()
+
+        if sent:
+            await ctx.send(f"✅ Messaggio di benvenuto inviato a {sent} utente/i.")
+        else:
+            await ctx.send("⚠️ Nessun messaggio inviato. Controlla che il canale di benvenuto sia configurato correttamente.")
 
     async def check_badges(self, user_id: int, guild_id: int, user_stats: dict):
         """
@@ -449,6 +487,16 @@ class ActivityEvents(commands.Cog):
         if not badges_cog:
             return
 
+        for badge_id in self._qualifying_badges(user_id, guild_id, user_stats):
+            await badges_cog._check_and_award_badge(user_id, badge_id)
+
+    def _qualifying_badges(self, user_id: int, guild_id: int, user_stats: dict) -> set:
+        """
+        Valuta le condizioni di TUTTI i badge e restituisce l'insieme dei badge_id
+        meritati ORA. Valutazione pura (nessuna assegnazione/DM): riusata sia da
+        check_badges sia dal comando di ricalcolo dei badge.
+        """
+        qualifying = set()
         try:
             # Recupera tutti i badge e i loro requisiti dal DB
             self.bot.cursor.execute(queries.get_all_badges_query)
@@ -534,10 +582,28 @@ class ActivityEvents(commands.Cog):
                     if user_stats.get('stream_seconds', 0) >= check_value:
                         awarded = True
 
+                elif badge_id == 14 and check_value: # Guardiano Notturno (Notturno avanzato)
+                    if user_stats.get('night_voice_seconds', 0) >= check_value:
+                        awarded = True
+
+                elif badge_id == 15 and check_value: # Oratore (Messaggi avanzato)
+                    if user_stats.get('message_count', 0) >= check_value:
+                        awarded = True
+
+                elif badge_id == 16 and check_value: # Leggenda (Livello avanzato)
+                    if user_stats.get('level', 1) >= check_value:
+                        awarded = True
+
+                elif badge_id == 17 and check_value: # Inarrestabile (Striscia avanzata)
+                    if user_stats.get('activity_streak', 0) >= check_value:
+                        awarded = True
+
                 if awarded:
-                    await badges_cog._check_and_award_badge(user_id, badge_id)
+                    qualifying.add(badge_id)
         except Exception as e:
-            logging.error(f"Errore durante il controllo dei badge per {user_id}: {e}")
+            logging.error(f"Errore durante la valutazione dei badge per {user_id}: {e}")
+
+        return qualifying
 
     async def update_streak(self, user_id: int):
         """
@@ -570,6 +636,160 @@ class ActivityEvents(commands.Cog):
             
         except Exception as e:
             logging.error(f"Errore aggiornamento streak per {user_id}: {e}")
+
+    def _compute_recalculated_stats(self):
+        """
+        Ricalcola dalle sessioni vocali concluse (tabella voice_activity) le statistiche
+        di attività di ogni utente: tempo vocale totale, tempo notturno e record XP
+        giornaliero (da sola voce). NON scrive nulla: restituisce la lista dei valori
+        proposti confrontati con quelli attuali.
+
+        Nota: l'XP giornaliero è ricostruito solo dall'attività vocale (di messaggi/reazioni
+        esiste solo il totale storico, senza data), quindi può risultare inferiore ai record
+        reali. Il tempo notturno usa lo span a-muro delle sessioni, includendo eventuale
+        tempo mutato (non esiste un log dei mute).
+        """
+        # 1) Aggrega tutte le sessioni concluse per utente
+        self.bot.cursor.execute(queries.get_all_closed_sessions_query)
+        sessions = self.bot.cursor.fetchall()
+
+        agg = {}  # user_id -> {'voice': int, 'night': int, 'daily_secs': {date: int}}
+        for s in sessions:
+            uid = s['user_id']
+            duration = s['duration_seconds'] or 0
+            data = agg.setdefault(uid, {'voice': 0, 'night': 0, 'daily_secs': {}})
+
+            data['voice'] += duration
+
+            # Rende le date "aware" nel fuso del bot prima del calcolo notturno
+            join_aware = self.bot.BOT_TZ.localize(s['join_time'])
+            leave_aware = self.bot.BOT_TZ.localize(s['leave_time'])
+            data['night'] += self.calculate_night_duration(join_aware, leave_aware)
+
+            # Secondi vocali per giorno (attribuiti al giorno di join) per l'XP giornaliero
+            day = s['join_time'].date()
+            data['daily_secs'][day] = data['daily_secs'].get(day, 0) + duration
+
+        # 2) Confronta con i valori correnti di tutti gli utenti
+        self.bot.cursor.execute(queries.get_all_users_stats_query)
+        users = self.bot.cursor.fetchall()
+
+        results = []
+        for u in users:
+            data = agg.get(u['id'], {'voice': 0, 'night': 0, 'daily_secs': {}})
+
+            # Record XP giornaliero da sola voce = massimo XP vocale in un singolo giorno
+            max_voice_daily_xp = 0
+            for day_secs in data['daily_secs'].values():
+                day_xp = int(day_secs / 60) * self.bot.XP_PER_MINUTE
+                if day_xp > max_voice_daily_xp:
+                    max_voice_daily_xp = day_xp
+            # Il daily_xp di oggi fa da pavimento (evita lo stato incoerente max_daily_xp < daily_xp)
+            new_max_daily_xp = max(max_voice_daily_xp, u['daily_xp'] or 0)
+
+            results.append({
+                'user_id': u['id'],
+                'name': u['nickname'] or u['username'],
+                'old_voice': u['voice_seconds'] or 0,
+                'new_voice': int(data['voice']),
+                'old_night': u['night_voice_seconds'] or 0,
+                'new_night': int(data['night']),
+                'old_max_daily_xp': u['max_daily_xp'] or 0,
+                'new_max_daily_xp': new_max_daily_xp,
+            })
+        return results
+
+    @commands.command(name='ricalcola', help="(Admin) Ricalcola tempo vocale, notturno e record XP giornaliero dai dati grezzi.")
+    @commands.has_permissions(administrator=True)
+    async def ricalcola(self, ctx, conferma: str = None):
+        """
+        Ricalcola le statistiche di attività di TUTTI gli utenti a partire dalla tabella
+        voice_activity. Senza argomenti mostra solo un'anteprima (non scrive nulla);
+        con `!ricalcola conferma` applica le modifiche.
+        """
+        apply_changes = conferma is not None and conferma.lower() in ('conferma', 'applica', 'confirm')
+
+        try:
+            results = self._compute_recalculated_stats()
+        except Exception as e:
+            logging.error(f"Errore nel calcolo delle statistiche ricalcolate: {e}", exc_info=True)
+            await ctx.send("❌ Errore durante il calcolo delle statistiche.")
+            return
+
+        # Utenti effettivamente interessati da una variazione
+        changed = [
+            r for r in results
+            if r['new_voice'] != r['old_voice']
+            or r['new_night'] != r['old_night']
+            or r['new_max_daily_xp'] != r['old_max_daily_xp']
+        ]
+        decreased = sorted(
+            [r for r in results if r['new_max_daily_xp'] < r['old_max_daily_xp']],
+            key=lambda r: r['old_max_daily_xp'] - r['new_max_daily_xp'],
+            reverse=True
+        )
+
+        total_new_voice = sum(r['new_voice'] for r in results)
+        total_new_night = sum(r['new_night'] for r in results)
+
+        # --- Modalità ANTEPRIMA (dry-run) ---
+        if not apply_changes:
+            embed = discord.Embed(
+                title="🧮 Anteprima ricalcolo statistiche",
+                description=(
+                    f"Utenti analizzati: **{len(results)}** — con variazioni: **{len(changed)}**.\n\n"
+                    "⚠️ Il record XP giornaliero è ricalcolato **solo dall'attività vocale** "
+                    "(l'XP di messaggi/reazioni non è ricostruibile), quindi può diminuire."
+                ),
+                color=self.bot.PRIMARY_COLOR
+            )
+            embed.add_field(
+                name="🔢 Totali ricalcolati",
+                value=f"🎙️ Vocale: **{format_duration(total_new_voice)}**\n🦉 Notturno: **{format_duration(total_new_night)}**",
+                inline=False
+            )
+            if decreased:
+                lines = [f"• **{r['name']}**: {r['old_max_daily_xp']} → {r['new_max_daily_xp']} XP" for r in decreased[:10]]
+                if len(decreased) > 10:
+                    lines.append(f"…e altri {len(decreased) - 10} utenti.")
+                embed.add_field(
+                    name=f"📉 Record XP giornaliero in calo ({len(decreased)})",
+                    value="\n".join(lines),
+                    inline=False
+                )
+            embed.set_footer(text="Nessuna modifica applicata. Esegui  !ricalcola conferma  per applicare.")
+            await ctx.send(embed=embed)
+            return
+
+        # --- Modalità APPLICA ---
+        try:
+            for r in changed:
+                self.bot.cursor.execute(
+                    queries.update_recomputed_stats_query,
+                    (r['new_voice'], r['new_night'], r['new_max_daily_xp'], r['user_id'])
+                )
+            self.bot.db.commit()
+        except Exception as e:
+            self.bot.db.rollback()
+            logging.error(f"Errore nell'applicazione del ricalcolo: {e}", exc_info=True)
+            await ctx.send("❌ Errore durante l'applicazione. Nessuna modifica salvata (rollback).")
+            return
+
+        logging.info(f"Ricalcolo statistiche eseguito da {ctx.author} su {len(changed)} utenti.")
+        embed = discord.Embed(
+            title="✅ Ricalcolo completato",
+            description=(
+                f"Statistiche aggiornate per **{len(changed)}** utenti (su {len(results)} totali).\n"
+                f"Record XP giornaliero in calo: **{len(decreased)}**."
+            ),
+            color=self.bot.PRIMARY_COLOR
+        )
+        embed.add_field(
+            name="🔢 Totali dopo il ricalcolo",
+            value=f"🎙️ Vocale: **{format_duration(total_new_voice)}**\n🦉 Notturno: **{format_duration(total_new_night)}**",
+            inline=False
+        )
+        await ctx.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message):

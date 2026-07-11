@@ -3,8 +3,14 @@ Questo cog gestisce il sistema di badge e onorificenze.
 """
 import discord
 from discord.ext import commands
+from collections import Counter
 import logging
 import queries
+
+# Badge che NON vanno mai revocati automaticamente dal ricalcolo:
+# 6 Pioniere (onorificenza storica), 7 Sostenitore (manuale),
+# 8 Maratoneta Vocale e 9 Super Sayan (record, "hall of fame").
+NON_REVOCABLE_BADGES = {6, 7, 8, 9}
 
 # Lista dei badge da inserire nel database all'avvio
 # Formato: (id, nome, descrizione, icona, valore_controllo)
@@ -12,7 +18,7 @@ INITIAL_BADGES = [
     # Badge basati sull'attività
     (1, 'Chiacchierone', 'Invia un totale di 100 messaggi.', '💬', 100),
     (2, 'Veterano Vocale', 'Accumula 50 ore totali nei canali vocali.', '🎙️', 50 * 3600), # 50 ore in secondi
-    (3, 'Notturno', 'Accumula 10 ore in vocale tra le 01:00 e le 05:00 del mattino.', '🦉', 10 * 3600),
+    (3, 'Notturno', 'Accumula 10 ore in vocale tra mezzanotte e le 05:00 del mattino.', '🦉', 10 * 3600),
     (4, 'Re delle Reazioni', 'Assegna un totale di 50 reazioni ai messaggi.', '✨', 50),
     # Badge basati sui traguardi
     (5, 'Maestro di Livello', 'Raggiungi il livello 25.', '🏆', 25),
@@ -25,7 +31,12 @@ INITIAL_BADGES = [
     # Nuovi Badge
     (11, 'Veterano', 'Membro del server da almeno 1 anno.', '💎', 365), # Giorni
     (12, 'Faccia a Faccia', 'Usa la webcam in vocale per almeno 5 ore totali.', '📹', 5 * 3600),
-    (13, 'Regista', 'Trasmetti in streaming (Go Live) per almeno 10 ore totali.', '🎥', 10 * 3600)
+    (13, 'Regista', 'Trasmetti in streaming (Go Live) per almeno 10 ore totali.', '🎥', 10 * 3600),
+    # Badge di livello avanzato (tier superiori)
+    (14, 'Guardiano Notturno', 'Accumula 50 ore in vocale tra mezzanotte e le 05:00.', '🌙', 50 * 3600),
+    (15, 'Oratore', 'Invia un totale di 1000 messaggi.', '🗣️', 1000),
+    (16, 'Leggenda', 'Raggiungi il livello 50.', '⭐', 50),
+    (17, 'Inarrestabile', 'Mantieni una striscia di attività (XP guadagnati) per 30 giorni di fila.', '💪', 30)
 ]
 
 class Badges(commands.Cog):
@@ -56,10 +67,10 @@ class Badges(commands.Cog):
         except Exception as e:
             logging.error(f"Errore durante l'inizializzazione dei badge: {e}", exc_info=True)
 
-    async def _check_and_award_badge(self, user_id, badge_id):
+    async def _check_and_award_badge(self, user_id, badge_id, notify: bool = True):
         """
         Controlla e assegna un badge a un utente se non lo ha già.
-        Invia una notifica se il badge viene assegnato per la prima volta.
+        Invia una notifica in DM se il badge è assegnato per la prima volta e notify=True.
         """
         try:
             # Tenta di inserire il badge per l'utente. IGNORE previene errori se esiste già.
@@ -68,18 +79,21 @@ class Badges(commands.Cog):
 
             # Se l'operazione ha inserito una nuova riga, significa che il badge è nuovo per l'utente.
             if self.bot.cursor.rowcount > 0:
-                user = await self.bot.fetch_user(user_id)
-                if not user:
-                    return
-
                 # Trova i dettagli del badge dalla lista iniziale
                 badge_info = next((b for b in INITIAL_BADGES if b[0] == badge_id), None)
                 if not badge_info:
                     return
-                
-                _, name, description, icon, _ = badge_info
 
-                logging.info(f"Assegnato il badge '{name}' all'utente {user.name} (ID: {user_id}).")
+                _, name, description, icon, _ = badge_info
+                logging.info(f"Assegnato il badge '{name}' all'utente {user_id}.")
+
+                # In modalità silenziosa (es. ricalcolo di massa) non si invia il DM.
+                if not notify:
+                    return
+
+                user = await self.bot.fetch_user(user_id)
+                if not user:
+                    return
 
                 embed = discord.Embed(
                     title="🏅 Nuovo Badge Ottenuto!",
@@ -96,6 +110,15 @@ class Badges(commands.Cog):
 
         except Exception as e:
             logging.error(f"Errore durante l'assegnazione del badge {badge_id} all'utente {user_id}: {e}", exc_info=True)
+
+    def _revoke_badge(self, user_id, badge_id):
+        """Revoca (rimuove) un badge a un utente. Nessuna notifica."""
+        try:
+            self.bot.cursor.execute(queries.remove_badge_from_user_query, (user_id, badge_id))
+            self.bot.db.commit()
+            logging.info(f"Revocato il badge {badge_id} all'utente {user_id}.")
+        except Exception as e:
+            logging.error(f"Errore durante la revoca del badge {badge_id} all'utente {user_id}: {e}", exc_info=True)
 
 
     @commands.command(name='badges', help="Mostra i badge guadagnati da un utente.")
@@ -183,6 +206,122 @@ class Badges(commands.Cog):
         except Exception as e:
             logging.error(f"Errore nel comando force_check_badges: {e}", exc_info=True)
             await ctx.send("Si è verificato un errore durante il controllo.")
+
+    def _compute_badge_changes(self, guild_id):
+        """
+        Calcola, per ogni utente, i badge da assegnare e da revocare in base alle
+        statistiche attuali. Non scrive nulla. Restituisce (plan, badge_labels):
+        - plan: lista di dict {user_id, name, to_award:set, to_revoke:set}
+        - badge_labels: dict badge_id -> "icona nome"
+        """
+        activity_cog = self.bot.get_cog('ActivityEvents')
+        if not activity_cog:
+            return [], {}
+
+        self.bot.cursor.execute(queries.get_all_badges_query)
+        all_badges = self.bot.cursor.fetchall()
+        badge_labels = {b['id']: f"{b['icon']} {b['name']}" for b in all_badges}
+
+        self.bot.cursor.execute(queries.get_all_users_stats_query)
+        users = self.bot.cursor.fetchall()
+
+        plan = []
+        for u in users:
+            self.bot.cursor.execute(queries.get_user_xp_query, (u['id'],))
+            stats = self.bot.cursor.fetchone()
+            if not stats:
+                continue
+
+            qualifying = activity_cog._qualifying_badges(u['id'], guild_id, stats)
+
+            self.bot.cursor.execute(queries.get_user_badge_ids_query, (u['id'],))
+            current = {row['badge_id'] for row in self.bot.cursor.fetchall()}
+
+            to_award = qualifying - current
+            to_revoke = (current - qualifying) - NON_REVOCABLE_BADGES
+
+            if to_award or to_revoke:
+                plan.append({
+                    'user_id': u['id'],
+                    'name': u['nickname'] or u['username'],
+                    'to_award': to_award,
+                    'to_revoke': to_revoke,
+                })
+        return plan, badge_labels
+
+    @commands.command(name='ricalcola_badge', help="(Admin) Sincronizza i badge di tutti gli utenti (assegna mancanti + revoca non più meritati).")
+    @commands.has_permissions(administrator=True)
+    async def ricalcola_badge(self, ctx, conferma: str = None):
+        """
+        Ricalcola i badge di TUTTI gli utenti in base alle statistiche attuali.
+        Senza argomenti mostra un'anteprima; con `!ricalcola_badge conferma` applica.
+        Le assegnazioni sono SILENZIOSE (nessun DM); i badge manuali e i record non
+        vengono mai revocati.
+        """
+        apply_changes = conferma is not None and conferma.lower() in ('conferma', 'applica', 'confirm')
+
+        try:
+            plan, badge_labels = self._compute_badge_changes(ctx.guild.id)
+        except Exception as e:
+            logging.error(f"Errore nel calcolo del ricalcolo badge: {e}", exc_info=True)
+            await ctx.send("❌ Errore durante il calcolo dei badge.")
+            return
+
+        award_by_badge = Counter()
+        revoke_by_badge = Counter()
+        for p in plan:
+            for bid in p['to_award']:
+                award_by_badge[bid] += 1
+            for bid in p['to_revoke']:
+                revoke_by_badge[bid] += 1
+        total_award = sum(award_by_badge.values())
+        total_revoke = sum(revoke_by_badge.values())
+
+        def _fmt(counter):
+            if not counter:
+                return "—"
+            return "\n".join(f"{badge_labels.get(bid, bid)}: **{n}**" for bid, n in counter.most_common())
+
+        # --- Modalità ANTEPRIMA (dry-run) ---
+        if not apply_changes:
+            embed = discord.Embed(
+                title="🧮 Anteprima ricalcolo badge",
+                description=(
+                    f"Utenti con variazioni: **{len(plan)}**.\n"
+                    f"Assegnazioni: **{total_award}** — Revoche: **{total_revoke}**.\n\n"
+                    "Le assegnazioni saranno **silenziose** (nessun DM). "
+                    "I badge manuali e i record non vengono revocati."
+                ),
+                color=self.bot.PRIMARY_COLOR
+            )
+            embed.add_field(name="➕ Da assegnare", value=_fmt(award_by_badge), inline=True)
+            embed.add_field(name="➖ Da revocare", value=_fmt(revoke_by_badge), inline=True)
+            embed.set_footer(text="Nessuna modifica applicata. Esegui  !ricalcola_badge conferma  per applicare.")
+            await ctx.send(embed=embed)
+            return
+
+        # --- Modalità APPLICA ---
+        applied_award = 0
+        applied_revoke = 0
+        for p in plan:
+            for bid in p['to_award']:
+                await self._check_and_award_badge(p['user_id'], bid, notify=False)
+                applied_award += 1
+            for bid in p['to_revoke']:
+                self._revoke_badge(p['user_id'], bid)
+                applied_revoke += 1
+
+        logging.info(f"Ricalcolo badge eseguito da {ctx.author}: +{applied_award} / -{applied_revoke} su {len(plan)} utenti.")
+        embed = discord.Embed(
+            title="✅ Ricalcolo badge completato",
+            description=(
+                f"Utenti aggiornati: **{len(plan)}**.\n"
+                f"Badge assegnati: **{applied_award}** — Badge revocati: **{applied_revoke}**."
+            ),
+            color=self.bot.PRIMARY_COLOR
+        )
+        await ctx.send(embed=embed)
+
 
 async def setup(bot):
     await bot.add_cog(Badges(bot))

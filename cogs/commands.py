@@ -6,7 +6,7 @@ from discord.ext import commands
 from datetime import datetime, timedelta
 import logging
 import queries
-from utils.formatters import format_duration, format_leaderboard
+from utils.formatters import format_duration, format_leaderboard, build_records_embed, get_effective_streak
 from cogs.tasks import generate_report
 from utils.xp_utils import calculate_xp_for_level_up
 
@@ -140,39 +140,97 @@ class UserCommands(commands.Cog):
         Mostra i record attuali del server da battere (XP giornaliero, Sessione più lunga, ecc.).
         """
         try:
-            embed = discord.Embed(title="🏆 Hall of Fame - Record del Server", description="Ecco i record attuali da battere!", color=self.bot.PRIMARY_COLOR)
-            
-            # Record XP Giornaliero
-            self.bot.cursor.execute(queries.get_record_daily_xp_query)
-            xp_record = self.bot.cursor.fetchone()
-            max_xp = xp_record['max_daily_xp'] if xp_record and xp_record['max_daily_xp'] is not None else 0
-            
-            if max_xp > 0:
-                holder = xp_record['nickname'] or xp_record['username']
-                embed.add_field(name="⚡ Max XP in un giorno", value=f"**{max_xp} XP**\nDetenuto da: **{holder}**", inline=True)
-            else:
-                embed.add_field(name="⚡ Max XP in un giorno", value="Nessun record stabilito.", inline=True)
-
-            # Record Sessione Vocale
-            self.bot.cursor.execute(queries.get_record_voice_duration_query)
-            voice_record = self.bot.cursor.fetchone()
-            max_duration = voice_record['duration_seconds'] if voice_record and voice_record['duration_seconds'] is not None else 0
-            
-            if max_duration > 0:
-                holder = voice_record['nickname'] or voice_record['username']
-                duration_str = format_duration(max_duration)
-                embed.add_field(name="⏳ Sessione Vocale più lunga", value=f"**{duration_str}**\nDetenuto da: **{holder}**", inline=True)
-            else:
-                embed.add_field(name="⏳ Sessione Vocale più lunga", value="Nessun record stabilito.", inline=True)
-
-            if self.bot.KOFI_USERNAME:
-                embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{self.bot.KOFI_USERNAME})", inline=False)
-
+            embed = build_records_embed(self.bot)
             await ctx.send(embed=embed)
-
         except Exception as e:
             logging.error(f"Errore nel comando records: {e}", exc_info=True)
             await ctx.send("Si è verificato un errore durante il recupero dei record.")
+
+    @commands.command(name='annuncio_v3', help="(Admin) Pubblica l'annuncio di aggiornamento Bot v3.0.")
+    @commands.has_permissions(administrator=True)
+    async def annuncio_v3(self, ctx, channel: discord.TextChannel = None):
+        """
+        Fa pubblicare al bot l'annuncio dell'aggiornamento v3.0.
+        Senza argomenti lo invia nel canale corrente; opzionalmente in un canale indicato.
+        """
+        target = channel or ctx.channel
+        try:
+            embed = discord.Embed(
+                title="🍻 Parola dell'Oste — Aggiornamento v3.0",
+                description=(
+                    "Avvicinatevi al bancone, avventori! Ho passato la notte a lucidare i boccali "
+                    "e a riordinare la cantina. Ecco cosa vi ho preparato nella mia taverna…"
+                ),
+                color=self.bot.PRIMARY_COLOR
+            )
+            embed.add_field(
+                name="🏅 Nuove Onorificenze",
+                value=(
+                    "Ho coniato quattro medaglie per i miei avventori più meritevoli:\n"
+                    "🌙 **Guardiano Notturno** — 50 ore a tenermi compagnia tra mezzanotte e le 05:00\n"
+                    "🗣️ **Oratore** — 1000 messaggi lasciati sul mio bancone\n"
+                    "⭐ **Leggenda** — quando raggiungete il livello 50\n"
+                    "💪 **Inarrestabile** — 30 giorni di fila senza mai saltare un giro"
+                ),
+                inline=False
+            )
+            embed.add_field(
+                name="🏆 L'Albo dei Campioni — `!records`",
+                value=(
+                    "Sul muro dietro il bancone ho appeso nuovi primati da spodestare:\n"
+                    "🦉 **Re della Notte** — chi mi tiene più compagnia nelle ore piccole\n"
+                    "🎙️ **Signore del Vocale** — chi passa più tempo nelle mie sale\n"
+                    "💬 **Messaggero Supremo** — chi più chiacchiera al bancone\n"
+                    "🔥 **Streak Record** — la frequentazione più lunga di sempre\n\n"
+                    "E ogni settimana, dopo il resoconto, vi mostrerò io stesso chi comanda l'albo!"
+                ),
+                inline=False
+            )
+            embed.add_field(
+                name="🦉 Le ore piccole contano di più",
+                value=(
+                    "Ora segno le vostre veglie a partire dalla **mezzanotte** (00:00 → 05:00). "
+                    "E ho tappato una falla: prima perdevo il conto di quasi tutte le ore piccole "
+                    "delle nottate più lunghe — adesso annoto tutto sul registro, boccale dopo boccale."
+                ),
+                inline=False
+            )
+            embed.add_field(
+                name="🔥 Il registro delle presenze non mente più",
+                value=(
+                    "Se saltate un giro, la vostra striscia riparte da zero: niente più conti "
+                    "gonfiati sul mio quaderno."
+                ),
+                inline=False
+            )
+            embed.add_field(
+                name="🧹 Ho fatto pulizia",
+                value=(
+                    "Ho spolverato i vecchi registri e rifatto due conti: qualche numero "
+                    "(ore piccole, record di XP in un giorno) potrebbe risultarvi diverso. "
+                    "È tutto in ordine, parola d'Oste."
+                ),
+                inline=False
+            )
+
+            if self.bot.KOFI_USERNAME:
+                embed.add_field(
+                    name="☕ Offrite da bere all'Oste",
+                    value=f"[Offritemi un boccale](https://ko-fi.com/{self.bot.KOFI_USERNAME})",
+                    inline=False
+                )
+
+            embed.set_footer(text="Il vostro Oste • Botrino v3.0 — Salute! 🍺")
+            embed.timestamp = discord.utils.utcnow()
+
+            await target.send(embed=embed)
+            if target.id != ctx.channel.id:
+                await ctx.send(f"✅ Annuncio pubblicato in {target.mention}.")
+        except discord.Forbidden:
+            await ctx.send(f"❌ Non ho i permessi per scrivere in {target.mention}.")
+        except Exception as e:
+            logging.error(f"Errore nel comando annuncio_v3: {e}", exc_info=True)
+            await ctx.send("Si è verificato un errore durante la pubblicazione dell'annuncio.")
 
     @commands.command(name='profile', help="Mostra il profilo completo di un utente.")
     async def profile(self, ctx, member: discord.Member = None):
@@ -235,8 +293,14 @@ class UserCommands(commands.Cog):
             embed.add_field(name="📊 Statistiche Attività", value=stats_desc, inline=True)
 
             # Sezione Statistiche Avanzate
+            # Streak "effettiva": il valore memorizzato si aggiorna solo con l'attività,
+            # quindi va corretto a schermo se la striscia è ormai interrotta.
+            today = datetime.now(self.bot.BOT_TZ).date()
+            current_streak = get_effective_streak(
+                user_stats['activity_streak'], user_stats['last_activity_date'], today
+            )
             adv_stats_desc = (
-                f"🔥 Streak Attuale: **{user_stats['activity_streak']} giorni**\n"
+                f"🔥 Streak Attuale: **{current_streak} giorni**\n"
                 f"⚡ Record XP Giornaliero: **{user_stats['max_daily_xp']}**\n"
                 f"🦉 Tempo Notturno: **{night_time}**"
             )
@@ -341,7 +405,7 @@ class UserCommands(commands.Cog):
                 "Ecco tutti i badge che puoi sbloccare:\n\n"
                 "💬 **Chiacchierone**: Invia 100 messaggi.\n"
                 "🎙️ **Veterano Vocale**: 50 ore in vocale.\n"
-                "🦉 **Notturno**: 10 ore in vocale di notte (01-05).\n"
+                "🦉 **Notturno**: 10 ore in vocale di notte (00-05).\n"
                 "✨ **Re delle Reazioni**: Dai 50 reazioni.\n"
                 "🏆 **Maestro di Livello**: Raggiungi il livello 25.\n"
                 "🚀 **Pioniere**: Primi 10 utenti del bot.\n"
@@ -351,7 +415,11 @@ class UserCommands(commands.Cog):
                 "🔥 **Instancabile**: Striscia attività di 7 giorni.\n"
                 "💎 **Veterano**: Nel server da 1 anno.\n"
                 "📹 **Faccia a Faccia**: 5 ore di webcam.\n"
-                "🎥 **Regista**: 10 ore di streaming."
+                "🎥 **Regista**: 10 ore di streaming.\n"
+                "🌙 **Guardiano Notturno**: 50 ore in vocale di notte.\n"
+                "🗣️ **Oratore**: Invia 1000 messaggi.\n"
+                "⭐ **Leggenda**: Raggiungi il livello 50.\n"
+                "💪 **Inarrestabile**: Striscia attività di 30 giorni."
             ),
             inline=False
         )
