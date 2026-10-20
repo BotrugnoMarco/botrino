@@ -1,6 +1,5 @@
-DROP DATABASE IF EXISTS discord_bot;
 CREATE DATABASE IF NOT EXISTS discord_bot;
-/* CREATE USER IF NOT EXISTS 'botuser'@'localhost' IDENTIFIED BY '***REMOVED***';
+/* CREATE USER IF NOT EXISTS 'botuser'@'localhost' IDENTIFIED BY 'la_tua_password';
  GRANT ALL PRIVILEGES ON discord_bot.* TO 'botuser'@'localhost';
  FLUSH PRIVILEGES; */
 USE discord_bot;
