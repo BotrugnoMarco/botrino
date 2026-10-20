@@ -46,10 +46,9 @@ class Badges(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_ready(self):
+    async def cog_load(self):
         """
-        Listener eseguito quando il bot è pronto.
+        Eseguito al caricamento del cog (il database è già connesso).
         Inizializza i badge nel database.
         """
         await self._initialize_badges()

@@ -23,8 +23,32 @@ class Botrino(commands.Bot):
         
         self.active_sessions = {}  # Traccia le sessioni vocali attive (user_id: start_time)
         self.message_timestamps = {}  # Traccia i timestamp dei messaggi per il cooldown (user_id: timestamp)
+        self._ready_once = False  # on_ready viene richiamato a ogni riconnessione
 
         self.load_config()
+
+    async def setup_hook(self):
+        """
+        Eseguito una sola volta prima della connessione a Discord.
+        Connette il database e carica i cogs.
+        """
+        logging.info("Inizializzazione...")
+        try:
+            # Connessione al database
+            self.db, self.cursor = await database.connect_to_db()
+
+            # Task per mantenere attiva la connessione al DB
+            asyncio.create_task(database.keep_db_alive(self))
+
+            # Caricamento di tutti i cogs (estensioni)
+            for filename in os.listdir('./cogs'):
+                if filename.endswith('.py'):
+                    await self.load_extension(f'cogs.{filename[:-3]}')
+                    logging.info(f"Caricato il cog: {filename}")
+        except Exception as e:
+            logging.critical(f"Errore critico durante l'avvio: {e}", exc_info=True)
+            await send_webhook(f"ERRORE CRITICO DURANTE L'AVVIO: {e}")
+            raise
 
     def load_config(self):
         """Carica le configurazioni dal file .env."""
@@ -78,23 +102,15 @@ bot.remove_command('help')  # Rimuove il comando help di default per usare quell
 @bot.event
 async def on_ready():
     """
-    Eseguito quando il bot è pronto e connesso a Discord.
+    Eseguito quando il bot è pronto e connesso a Discord (anche dopo ogni riconnessione).
     """
-    logging.info(f"Accesso effettuato come {bot.user}. Inizializzazione...")
+    logging.info(f"Accesso effettuato come {bot.user}.")
+    if bot._ready_once:
+        return
+    bot._ready_once = True
+
     try:
-        # Connessione al database
-        bot.db, bot.cursor = await database.connect_to_db()
-        
-        # Task per mantenere attiva la connessione al DB
-        asyncio.create_task(database.keep_db_alive(bot))
-        
-        # Caricamento di tutti i cogs (estensioni)
-        for filename in os.listdir('./cogs'):
-            if filename.endswith('.py'):
-                await bot.load_extension(f'cogs.{filename[:-3]}')
-                logging.info(f"Caricato il cog: {filename}")
-        
-        # Ripristino delle sessioni vocali dopo il caricamento dei cogs
+        # Ripristino delle sessioni vocali: richiede la cache dei membri, quindi va fatto qui
         activity_cog = bot.get_cog('ActivityEvents')
         if activity_cog:
             await activity_cog.resume_sessions()
