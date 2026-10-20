@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 import logging
 import asyncio
+import signal
 import pytz
 import aiohttp
 from utils import database
@@ -24,6 +25,7 @@ class Botrino(commands.Bot):
         self.active_sessions = {}  # Traccia le sessioni vocali attive (user_id: start_time)
         self.message_timestamps = {}  # Traccia i timestamp dei messaggi per il cooldown (user_id: timestamp)
         self._ready_once = False  # on_ready viene richiamato a ogni riconnessione
+        self._shutting_down = False  # close() può essere chiamato più volte
 
         self.load_config()
 
@@ -49,6 +51,21 @@ class Botrino(commands.Bot):
             logging.critical(f"Errore critico durante l'avvio: {e}", exc_info=True)
             await send_webhook(f"ERRORE CRITICO DURANTE L'AVVIO: {e}")
             raise
+
+    async def close(self):
+        """
+        Eseguito allo spegnimento: salva le sessioni vocali attive e chiude il database
+        prima di disconnettersi da Discord.
+        """
+        if not self._shutting_down:
+            self._shutting_down = True
+            logging.info("Il bot si sta spegnendo...")
+            activity_cog = self.get_cog('ActivityEvents')
+            if activity_cog:
+                await activity_cog.save_all_voice_data()
+            await database.close_db_connection(self)
+            logging.info("Spegnimento completato.")
+        await super().close()
 
     def load_config(self):
         """Carica le configurazioni dal file .env."""
@@ -121,18 +138,6 @@ async def on_ready():
         await send_webhook(f"ERRORE CRITICO DURANTE L'AVVIO: {e}")
 
 @bot.event
-async def on_close():
-    """
-    Eseguito quando il bot si disconnette.
-    """
-    logging.info("Il bot si sta spegnendo...")
-    activity_cog = bot.get_cog('ActivityEvents')
-    if activity_cog:
-        await activity_cog.save_all_voice_data()
-    await database.close_db_connection(bot)
-    logging.info("Spegnimento completato.")
-
-@bot.event
 async def on_error(event, *args, **kwargs):
     logging.error(f"Errore non gestito nell'evento '{event}'", exc_info=True)
 
@@ -162,6 +167,12 @@ async def send_webhook(message):
 # --- AVVIO ---
 async def main():
     async with bot:
+        # SIGTERM (es. pkill da botctl.sh) chiude il bot in modo pulito, salvando le sessioni.
+        # Su Windows add_signal_handler non è supportato: lì basta Ctrl+C.
+        try:
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(bot.close()))
+        except NotImplementedError:
+            pass
         await bot.start(bot.TOKEN)
 
 if __name__ == "__main__":
