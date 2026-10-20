@@ -9,3 +9,7 @@ logs/
 __pycache__/
 *.pyc
 venv/
+.env.*
+!.env.example
+.pytest_cache/
+*.log
