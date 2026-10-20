@@ -662,8 +662,8 @@ class ActivityEvents(commands.Cog):
             data['voice'] += duration
 
             # Rende le date "aware" nel fuso del bot prima del calcolo notturno
-            join_aware = self.bot.BOT_TZ.localize(s['join_time'])
-            leave_aware = self.bot.BOT_TZ.localize(s['leave_time'])
+            join_aware = s['join_time'].replace(tzinfo=self.bot.BOT_TZ)
+            leave_aware = s['leave_time'].replace(tzinfo=self.bot.BOT_TZ)
             data['night'] += self.calculate_night_duration(join_aware, leave_aware)
 
             # Secondi vocali per giorno (attribuiti al giorno di join) per l'XP giornaliero

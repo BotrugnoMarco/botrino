@@ -61,8 +61,8 @@ async def generate_report(bot, channel: discord.TextChannel, title: str, start_d
                 continue
 
             # Rende le date dal DB "aware" usando il fuso orario del bot
-            join_time_aware = bot.BOT_TZ.localize(row['join_time'])
-            leave_time_aware = bot.BOT_TZ.localize(row['leave_time'])
+            join_time_aware = row['join_time'].replace(tzinfo=bot.BOT_TZ)
+            leave_time_aware = row['leave_time'].replace(tzinfo=bot.BOT_TZ)
 
             channel_id = row['channel_id']
             if channel_id not in channel_intervals:

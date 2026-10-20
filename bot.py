@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import logging
 import asyncio
 import signal
-import pytz
+from zoneinfo import ZoneInfo
 import aiohttp
 from utils import database
 
@@ -82,7 +82,7 @@ class Botrino(commands.Bot):
         self.AFK_MOVE_TIMEOUT_MINUTES = int(os.getenv("AFK_MOVE_TIMEOUT_MINUTES", 30))
         self.AFK_EXCLUDED_USER_IDS = [int(uid) for uid in os.getenv("AFK_EXCLUDED_USER_IDS", "").split(',') if uid]
         self.AFK_EXEMPT_CHANNEL_IDS = [int(cid) for cid in os.getenv("AFK_EXEMPT_CHANNEL_IDS", "").split(',') if cid]
-        self.BOT_TZ = pytz.timezone(os.getenv("ZONE", "UTC"))
+        self.BOT_TZ = ZoneInfo(os.getenv("ZONE", "UTC"))
         
         # Costanti per il sistema di XP
         self.XP_PER_MINUTE = int(os.getenv("XP_PER_MINUTE", 3))
