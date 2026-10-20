@@ -9,11 +9,10 @@ Bot Discord per il coinvolgimento della community: XP e livelli, tracciamento de
 
 🇬🇧 [Read in English](README.md)
 
-<!--
-  Screenshot: salva le immagini in docs/ e decommenta le righe qui sotto.
-  ![Profilo](docs/screenshot-profile.png)
-  ![Report giornaliero](docs/screenshot-report.png)
--->
+<p>
+  <img src="docs/screenshot-profile.png" alt="Profilo utente con livello, statistiche e badge" width="58%">
+  <img src="docs/screenshot-report.png" alt="Report giornaliero dell'attività vocale" width="40%">
+</p>
 
 ## Funzionalità
 

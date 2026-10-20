@@ -11,11 +11,10 @@ A Discord bot for community engagement: XP and levels, voice activity tracking, 
 
 > The bot's commands and messages are in Italian.
 
-<!--
-  Screenshots: save the images in docs/ and uncomment the lines below.
-  ![Profile](docs/screenshot-profile.png)
-  ![Daily report](docs/screenshot-report.png)
--->
+<p>
+  <img src="docs/screenshot-profile.png" alt="User profile with level, stats and badges" width="58%">
+  <img src="docs/screenshot-report.png" alt="Daily voice activity report" width="40%">
+</p>
 
 ## Features
 
