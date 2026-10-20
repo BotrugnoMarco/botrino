@@ -330,11 +330,13 @@ class UserCommands(commands.Cog):
         Mostra un messaggio di aiuto con la lista di tutti i comandi disponibili.
         """
         embed = discord.Embed(title="🤖 Comandi disponibili — Botrino", description="Ecco la lista completa dei comandi che puoi usare:", color=self.bot.PRIMARY_COLOR)
-        embed.add_field(name="`!report`", value="Mostra il report delle attività di oggi.", inline=False)
+        embed.add_field(name="`!report`", value="Mostra il report delle attività vocali delle ultime 24 ore.", inline=False)
         embed.add_field(name="`!profile [utente]`", value="Visualizza il profilo completo con statistiche e badge.", inline=False)
         embed.add_field(name="`!leaderboard`", value="Visualizza la classifica del tempo trascorso in vocale.", inline=False)
         embed.add_field(name="`!level [utente]`", value="Mostra il livello e l'XP di un utente (o i tuoi).", inline=False)
         embed.add_field(name="`!level_leaderboard`", value="Mostra la classifica dei livelli.", inline=False)
+        embed.add_field(name="`!records`", value="Mostra la Hall of Fame con i record del server.", inline=False)
+        embed.add_field(name="`!badges [utente]`", value="Mostra i badge guadagnati da un utente (o i tuoi).", inline=False)
         embed.add_field(name="`!donate`", value="Mostra il link per supportare lo sviluppo del bot.", inline=False)
         embed.add_field(name="`!help_botrino`", value="Mostra questo messaggio di aiuto.", inline=False)
         
