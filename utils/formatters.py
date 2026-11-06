@@ -5,6 +5,7 @@ come durate temporali e classifiche, per una visualizzazione pulita su Discord.
 import discord
 import logging
 import queries
+import theme
 
 def format_duration(total_seconds: float) -> str:
     """
@@ -51,7 +52,7 @@ def format_leaderboard(rows: list[dict], formatter: callable) -> str:
     Utilizza emoji per le prime tre posizioni.
     """
     if not rows:
-        return "Nessun dato da mostrare nella classifica."
+        return theme.LEADERBOARD_EMPTY
         
     leaderboard_text = ""
     ranks = ['🥇', '🥈', '🥉']
@@ -72,9 +73,9 @@ def build_records_embed(bot) -> discord.Embed:
     Riusato sia dal comando !records sia dal report settimanale.
     """
     embed = discord.Embed(
-        title="🏆 Hall of Fame - Record del Server",
-        description="Ecco i record attuali da battere!",
-        color=bot.PRIMARY_COLOR
+        title=theme.RECORDS_TITLE,
+        description=theme.RECORDS_TEXT,
+        color=theme.COLOR_GOLD
     )
 
     def _add_record(name, query, value_key, formatter=None, suffix=""):
@@ -89,33 +90,34 @@ def build_records_embed(bot) -> discord.Embed:
         if value and value > 0:
             holder = row['nickname'] or row['username']
             shown = formatter(value) if formatter else f"{value}{suffix}"
-            embed.add_field(name=name, value=f"**{shown}**\nDetenuto da: **{holder}**", inline=True)
+            embed.add_field(name=name, value=f"**{shown}**\n{theme.RECORDS_HOLDER.format(holder=holder)}", inline=True)
         else:
-            embed.add_field(name=name, value="Nessun record stabilito.", inline=True)
+            embed.add_field(name=name, value=theme.RECORDS_NONE, inline=True)
 
-    _add_record("⚡ Max XP in un giorno", queries.get_record_daily_xp_query, 'max_daily_xp', suffix=" XP")
-    _add_record("⏳ Sessione Vocale più lunga", queries.get_record_voice_duration_query, 'duration_seconds', formatter=format_duration)
-    _add_record("🦉 Re della Notte", queries.get_record_night_voice_query, 'night_voice_seconds', formatter=format_duration)
-    _add_record("🎙️ Signore del Vocale", queries.get_record_total_voice_query, 'voice_seconds', formatter=format_duration)
-    _add_record("💬 Messaggero Supremo", queries.get_record_message_count_query, 'message_count', suffix=" messaggi")
-    _add_record("🔥 Streak Record", queries.get_record_streak_query, 'activity_streak', formatter=lambda v: f"{v} giorni")
+    _add_record(theme.RECORD_DAILY_XP, queries.get_record_daily_xp_query, 'max_daily_xp', suffix=" XP")
+    _add_record(theme.RECORD_LONGEST_SESSION, queries.get_record_voice_duration_query, 'duration_seconds', formatter=format_duration)
+    _add_record(theme.RECORD_NIGHT, queries.get_record_night_voice_query, 'night_voice_seconds', formatter=format_duration)
+    _add_record(theme.RECORD_TOTAL_VOICE, queries.get_record_total_voice_query, 'voice_seconds', formatter=format_duration)
+    _add_record(theme.RECORD_MESSAGES, queries.get_record_message_count_query, 'message_count', suffix=" messaggi")
+    _add_record(theme.RECORD_STREAK, queries.get_record_streak_query, 'activity_streak', formatter=lambda v: f"{v} giorni")
 
     if bot.KOFI_USERNAME:
-        embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{bot.KOFI_USERNAME})", inline=False)
+        embed.add_field(name=theme.KOFI_FIELD_NAME, value=theme.kofi_link(bot.KOFI_USERNAME), inline=False)
+    embed.set_footer(text=theme.FOOTER)
 
     return embed
 
 
-async def send_report_embed(destination, title: str, user_rows: list[dict], channel_report_rows: list[dict] = None, soundboard_rows: list[dict] = None, color: int = 0x2E8B57, kofi_username: str = None):
+async def send_report_embed(destination, title: str, user_rows: list[dict], channel_report_rows: list[dict] = None, soundboard_rows: list[dict] = None, color: int = theme.COLOR_PRIMARY, kofi_username: str = None):
     """
     Costruisce e invia un embed formattato per i report (giornalieri/settimanali).
     Migliorato con podio, statistiche totali e formattazione visiva.
     """
     try:
-        embed = discord.Embed(title=f"📊 {title}", color=color)
+        embed = discord.Embed(title=f"📜 {title}", color=color)
         
         if not user_rows and not channel_report_rows and not soundboard_rows:
-            embed.description = "💤 Nessuna attività registrata per questo periodo."
+            embed.description = theme.REPORT_EMPTY
         else:
             # --- Statistiche Totali ---
             total_voice_time = sum(row.get('total_secs', 0) for row in user_rows)
@@ -123,8 +125,8 @@ async def send_report_embed(destination, title: str, user_rows: list[dict], chan
             active_users_count = len([r for r in user_rows if r.get('total_secs', 0) > 0])
             
             embed.description = (
-                f"🕒 **Tempo Totale in Vocale**: `{formatted_total_time}`\n"
-                f"👥 **Utenti Attivi**: `{active_users_count}`\n"
+                f"{theme.REPORT_TOTAL_TIME}: `{formatted_total_time}`\n"
+                f"{theme.REPORT_ACTIVE_USERS}: `{active_users_count}`\n"
                 "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬"
             )
 
@@ -150,7 +152,7 @@ async def send_report_embed(destination, title: str, user_rows: list[dict], chan
                     # Se il testo è troppo lungo, lo tronchiamo o dividiamo (qui semplice troncamento per sicurezza)
                     if len(top_users_text) > 1024:
                         top_users_text = top_users_text[:1020] + "..."
-                    embed.add_field(name="🏆 Top Utenti", value=top_users_text, inline=False)
+                    embed.add_field(name=theme.REPORT_TOP_USERS, value=top_users_text, inline=False)
 
             # --- Sezione Attività Canali ---
             if channel_report_rows:
@@ -162,12 +164,12 @@ async def send_report_embed(destination, title: str, user_rows: list[dict], chan
                     if row.get('total_activity_seconds', 0) > 0:
                         channel_name = row.get('channel_name', 'N/A')
                         duration = format_duration(row['total_activity_seconds'])
-                        channel_text += f"🔊 **{channel_name}**: `{duration}`\n"
+                        channel_text += f"**{channel_name}**: `{duration}`\n"
                 
                 if channel_text:
                     if len(channel_text) > 1024:
                         channel_text = channel_text[:1020] + "..."
-                    embed.add_field(name="📡 Canali più Attivi", value=channel_text, inline=False)
+                    embed.add_field(name=theme.REPORT_CHANNELS, value=channel_text, inline=False)
 
             # --- Sezione Soundboard ---
             if soundboard_rows:
@@ -181,14 +183,14 @@ async def send_report_embed(destination, title: str, user_rows: list[dict], chan
                 if soundboard_text:
                     if len(soundboard_text) > 1024:
                         soundboard_text = soundboard_text[:1020] + "..."
-                    embed.add_field(name="🎵 Soundboard più usata", value=soundboard_text, inline=False)
+                    embed.add_field(name=theme.REPORT_SOUNDBOARD, value=soundboard_text, inline=False)
 
         # Footer e Timestamp
-        embed.set_footer(text="Report generato automaticamente • Botrino")
+        embed.set_footer(text=theme.REPORT_FOOTER)
         embed.timestamp = discord.utils.utcnow()
 
         if kofi_username:
-            embed.add_field(name="☕ Supporto", value=f"[Offrimi un caffè]({f'https://ko-fi.com/{kofi_username}'})", inline=False)
+            embed.add_field(name=theme.KOFI_FIELD_NAME, value=theme.kofi_link(kofi_username), inline=False)
 
         await destination.send(embed=embed)
         

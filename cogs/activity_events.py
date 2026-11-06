@@ -8,6 +8,7 @@ from discord.ext import commands
 from datetime import datetime, timedelta, time
 import logging
 import queries
+import theme
 from utils.xp_utils import calculate_xp_for_level_up
 from utils.formatters import format_duration
 
@@ -67,7 +68,7 @@ class ActivityEvents(commands.Cog):
     async def update_xp_and_level(self, user_id: int, guild_id: int, xp_to_add: int):
         """
         Aggiorna l'XP di un utente, gestisce i passaggi di livello e assegna i ruoli-ricompensa.
-        Gestisce anche l'XP giornaliero per il badge Super Sayan.
+        Gestisce anche l'XP giornaliero per il badge Veni Vidi Vici.
         """
         if xp_to_add <= 0:
             return
@@ -96,7 +97,7 @@ class ActivityEvents(commands.Cog):
             
             if current_daily_xp > max_daily_xp:
                 max_daily_xp = current_daily_xp
-                # Controllo Badge 9: Super Sayan (Record XP giornaliero)
+                # Controllo Badge 9: Veni Vidi Vici (Record XP giornaliero)
                 # Recupera il record attuale del server
                 self.bot.cursor.execute(queries.get_server_max_daily_xp_query)
                 server_max_result = self.bot.cursor.fetchone()
@@ -140,7 +141,7 @@ class ActivityEvents(commands.Cog):
                         
                         channel = self.bot.get_channel(self.bot.REPORT_CHANNEL_ID)
                         if channel:
-                            await channel.send(f"🎉 Congratulazioni {member.mention}, sei salito al livello **{current_level}**!")
+                            await channel.send(theme.level_up_message(member.mention, current_level))
                 else:
                     logging.warning(f"Impossibile trovare il server (guild) per l'utente {user_id} durante il level up.")
 
@@ -316,7 +317,7 @@ class ActivityEvents(commands.Cog):
                     if night_seconds > 0:
                         self.bot.cursor.execute(queries.update_night_voice_seconds_query, (night_seconds, user_id))
 
-                # Controllo Badge 8: Maratoneta Vocale (Record sessione)
+                # Controllo Badge 8: Clessidra (Record sessione)
                 self.bot.cursor.execute(queries.get_server_max_voice_duration_query)
                 max_duration_result = self.bot.cursor.fetchone()
                 current_record = max_duration_result['max_duration'] if max_duration_result and max_duration_result['max_duration'] is not None else 0
@@ -426,16 +427,16 @@ class ActivityEvents(commands.Cog):
             return False
 
         embed = discord.Embed(
-            title=f"Benvenuto/a {member.name}!",
-            description=f"Ciao {member.mention}, benvenuto/a nel Drunken's Server! L’oste ti porge un boccale pieno 🍺...",
+            title=theme.WELCOME_TITLE.format(name=member.display_name),
+            description=theme.WELCOME_TEXT.format(mention=member.mention),
             color=self.bot.PRIMARY_COLOR
         )
         embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
 
         if self.bot.KOFI_USERNAME:
-            embed.description += f"\n\n[☕ Supporta il bot](https://ko-fi.com/{self.bot.KOFI_USERNAME})"
+            embed.description += f"\n\n{theme.kofi_link(self.bot.KOFI_USERNAME)}"
 
-        embed.set_footer(text=f"Sei il {member.guild.member_count}° membro!")
+        embed.set_footer(text=theme.WELCOME_FOOTER.format(count=member.guild.member_count))
         await channel.send(embed=embed)
         return True
 
@@ -509,27 +510,27 @@ class ActivityEvents(commands.Cog):
                 awarded = False
                 
                 # Logica specifica per ogni badge basata sull'ID
-                if badge_id == 1 and check_value: # Chiacchierone (Messaggi)
+                if badge_id == 1 and check_value: # Voce del Foro (Messaggi)
                     if user_stats.get('message_count', 0) >= check_value:
                         awarded = True
                 
-                elif badge_id == 2 and check_value: # Veterano Vocale (Tempo in vocale)
+                elif badge_id == 2 and check_value: # Sempre al Bancone (Tempo in vocale)
                     if user_stats.get('voice_seconds', 0) >= check_value:
                         awarded = True
 
-                elif badge_id == 3 and check_value: # Notturno (Ore in vocale notturne)
+                elif badge_id == 3 and check_value: # Nottambulo (Ore in vocale notturne)
                     if user_stats.get('night_voice_seconds', 0) >= check_value:
                         awarded = True
 
-                elif badge_id == 4 and check_value: # Re delle Reazioni (Reazioni date)
+                elif badge_id == 4 and check_value: # Alla Salute! (Reazioni date)
                     if user_stats.get('reaction_count', 0) >= check_value:
                         awarded = True
                 
-                elif badge_id == 5 and check_value: # Maestro di Livello (Livello)
+                elif badge_id == 5 and check_value: # Corona d'Alloro (Livello)
                     if user_stats.get('level', 1) >= check_value:
                         awarded = True
                 
-                elif badge_id == 6 and check_value: # Pioniere (Primi 10 utenti)
+                elif badge_id == 6 and check_value: # Fondatore (Primi 10 utenti)
                     # Controlla se l'utente è tra i primi 10 registrati nel DB
                     self.bot.cursor.execute(queries.get_first_users_query, (check_value,))
                     first_users = [row['id'] for row in self.bot.cursor.fetchall()]
@@ -537,7 +538,7 @@ class ActivityEvents(commands.Cog):
                     if user_id in first_users:
                         awarded = True
 
-                elif badge_id == 8: # Maratoneta Vocale (Record sessione)
+                elif badge_id == 8: # Clessidra (Record sessione)
                     # Controlla se l'utente ha stabilito un nuovo record
                     self.bot.cursor.execute(queries.get_server_max_voice_duration_query)
                     max_duration_result = self.bot.cursor.fetchone()
@@ -549,7 +550,7 @@ class ActivityEvents(commands.Cog):
                         if self.bot.cursor.fetchone():
                             awarded = True
 
-                elif badge_id == 9: # Super Sayan (Record XP giornaliero)
+                elif badge_id == 9: # Veni Vidi Vici (Record XP giornaliero)
                     self.bot.cursor.execute(queries.get_server_max_daily_xp_query)
                     max_xp_result = self.bot.cursor.fetchone()
                     current_record_xp = max_xp_result['max_xp'] if max_xp_result and max_xp_result['max_xp'] is not None else 0
@@ -557,11 +558,11 @@ class ActivityEvents(commands.Cog):
                     if user_stats.get('max_daily_xp', 0) >= current_record_xp and current_record_xp > 0:
                         awarded = True
 
-                elif badge_id == 10 and check_value: # Instancabile (Striscia giorni)
+                elif badge_id == 10 and check_value: # Legionario (Striscia giorni)
                     if user_stats.get('activity_streak', 0) >= check_value:
                         awarded = True
 
-                elif badge_id == 11 and check_value: # Veterano (Giorni nel server)
+                elif badge_id == 11 and check_value: # Un Anno a Pompei (Giorni nel server)
                     # Recupera l'oggetto member per controllare joined_at
                     member = None
                     if guild_id:
@@ -574,27 +575,27 @@ class ActivityEvents(commands.Cog):
                         if days_in_server >= check_value:
                             awarded = True
 
-                elif badge_id == 12 and check_value: # Faccia a Faccia (Video)
+                elif badge_id == 12 and check_value: # Ritratto (Video)
                     if user_stats.get('video_seconds', 0) >= check_value:
                         awarded = True
 
-                elif badge_id == 13 and check_value: # Regista (Stream)
+                elif badge_id == 13 and check_value: # In Scena (Stream)
                     if user_stats.get('stream_seconds', 0) >= check_value:
                         awarded = True
 
-                elif badge_id == 14 and check_value: # Guardiano Notturno (Notturno avanzato)
+                elif badge_id == 14 and check_value: # Vigile Notturno (Notturno avanzato)
                     if user_stats.get('night_voice_seconds', 0) >= check_value:
                         awarded = True
 
-                elif badge_id == 15 and check_value: # Oratore (Messaggi avanzato)
+                elif badge_id == 15 and check_value: # Cicerone (Messaggi avanzato)
                     if user_stats.get('message_count', 0) >= check_value:
                         awarded = True
 
-                elif badge_id == 16 and check_value: # Leggenda (Livello avanzato)
+                elif badge_id == 16 and check_value: # Trionfo (Livello avanzato)
                     if user_stats.get('level', 1) >= check_value:
                         awarded = True
 
-                elif badge_id == 17 and check_value: # Inarrestabile (Striscia avanzata)
+                elif badge_id == 17 and check_value: # Fuoco di Vesta (Striscia avanzata)
                     if user_stats.get('activity_streak', 0) >= check_value:
                         awarded = True
 

@@ -24,6 +24,7 @@ Bot Discord per il coinvolgimento della community: XP e livelli, tracciamento de
 - **Report**: report giornaliero dell'attività vocale (ultime 24 ore, alle 09:00) e settimanale (lunedì alle 10:00), con i canali più attivi e l'uso della soundboard.
 - **AFK automatico**: chi resta mutato oltre un timeout configurabile viene spostato nel canale AFK.
 - **Messaggi di benvenuto** per i nuovi membri.
+- **Tema del server** in un unico file (`theme.py`): nomi e descrizioni dei badge, testi, titoli e colori. Il tema attuale è il *Thermopolium*, un bancone di Pompei, con Botrino nei panni dell'Automa.
 
 ## Comandi
 
@@ -55,8 +56,7 @@ Richiedono il permesso *Amministratore*.
 | `!force_check_badges [@utente]` | Forza il controllo dei badge di un utente |
 | `!ricalcola_badge [conferma]` | Sincronizza i badge di tutti gli utenti (assegna i mancanti, revoca quelli non più meritati) |
 | `!say #canale <messaggio>` | Fa inviare un messaggio al bot in un canale |
-| `!annuncio_v3 [#canale]` | Pubblica l'annuncio dell'aggiornamento v3.0 |
-| `!announce_updates` | Pubblica le ultime novità nel canale aggiornamenti (nascosto) |
+| `!annuncio_thermopolium [#canale]` | Pubblica l'annuncio della nuova identità del server |
 
 ### Comandi owner (nascosti)
 
@@ -142,6 +142,7 @@ I test vengono eseguiti anche su GitHub Actions a ogni push e pull request.
 ```
 botrino/
 ├── bot.py                  # Punto di ingresso: configurazione, avvio e spegnimento
+├── theme.py                # Tema: testi, badge e colori visibili agli utenti
 ├── queries.py              # Query SQL
 ├── setup.sql               # Schema del database
 ├── botctl.sh               # Script di gestione in produzione
