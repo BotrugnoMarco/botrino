@@ -7,6 +7,7 @@ import discord
 from discord.ext import commands
 from datetime import datetime, timedelta, time
 import logging
+import mysql.connector
 import queries
 from utils.xp_utils import calculate_xp_for_level_up
 from utils.formatters import format_duration
@@ -951,7 +952,8 @@ class ActivityEvents(commands.Cog):
         Aggiorna il nome utente e il nickname nel database quando cambiano.
         """
         if before.display_name != after.display_name:
-            self.bot.cursor.execute(queries.update_user_names_query, (after.name, after.nick, after.id))
+            # nickname è NOT NULL: se il nick viene rimosso salviamo '' (i formatter ricadono su username)
+            self.bot.cursor.execute(queries.update_user_names_query, (after.name, after.nick or '', after.id))
             self.bot.db.commit()
 
 
