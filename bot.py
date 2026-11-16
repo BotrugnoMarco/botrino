@@ -149,6 +149,20 @@ async def on_command_error(ctx, error):
     """
     if isinstance(error, commands.CommandNotFound):
         return  # Ignora i comandi non trovati
+    if ctx.command and ctx.command.has_error_handler():
+        return  # Il comando ha già un suo gestore (es. sim_daily): evita il doppio messaggio
+    if isinstance(error, (commands.MissingPermissions, commands.NotOwner)):
+        await ctx.send("❌ Non hai i permessi per usare questo comando.")
+        return
+    if isinstance(error, commands.MemberNotFound):
+        await ctx.send(f"❌ Utente non trovato: `{error.argument}`.")
+        return
+    if isinstance(error, commands.ChannelNotFound):
+        await ctx.send(f"❌ Canale non trovato: `{error.argument}`.")
+        return
+    if isinstance(error, (commands.MissingRequiredArgument, commands.BadArgument)):
+        await ctx.send(f"❌ Uso corretto: `!{ctx.command.qualified_name} {ctx.command.signature}`")
+        return
     logging.error(f"Errore nel comando {ctx.command}: {error}", exc_info=True)
     await ctx.send("Si è verificato un errore durante l'esecuzione del comando.")
 
