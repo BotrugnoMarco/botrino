@@ -8,6 +8,7 @@ import signal
 from zoneinfo import ZoneInfo
 import aiohttp
 from utils import database
+import theme
 
 # --- CONFIGURAZIONE ---
 os.makedirs('logs', exist_ok=True)
@@ -72,7 +73,8 @@ class Botrino(commands.Bot):
         """Carica le configurazioni dal file .env."""
         self.TOKEN = os.getenv("DISCORD_TOKEN")
         self.WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-        self.PRIMARY_COLOR = int(os.getenv("PRIMARY_COLOR", "2E8B57"), 16)
+        primary_color = os.getenv("PRIMARY_COLOR")
+        self.PRIMARY_COLOR = int(primary_color, 16) if primary_color else theme.COLOR_PRIMARY
         self.KOFI_USERNAME = os.getenv("KOFI_USERNAME")
         self.REPORT_CHANNEL_ID = int(os.getenv("REPORT_CHANNEL_ID"))
         self.REPORT_EXCLUDE_CHANNEL_IDS = [int(cid) for cid in os.getenv("REPORT_EXCLUDE_CHANNEL_IDS", "").split(',') if cid]
@@ -112,7 +114,8 @@ intents.members = True
 intents.message_content = True
 intents.reactions = True
 
-bot = Botrino(command_prefix='!', intents=intents)
+# Lo stato passato qui viene reinviato da discord.py anche a ogni riconnessione
+bot = Botrino(command_prefix='!', intents=intents, activity=discord.CustomActivity(name=theme.PRESENCE))
 bot.remove_command('help')  # Rimuove il comando help di default per usare quello custom
 
 

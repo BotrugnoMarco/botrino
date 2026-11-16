@@ -6,38 +6,15 @@ from discord.ext import commands
 from collections import Counter
 import logging
 import queries
+import theme
 
 # Badge che NON vanno mai revocati automaticamente dal ricalcolo:
-# 6 Pioniere (onorificenza storica), 7 Sostenitore (manuale),
-# 8 Maratoneta Vocale e 9 Super Sayan (record, "hall of fame").
+# 6 Fondatore (onorificenza storica), 7 Mecenate (manuale),
+# 8 Clessidra e 9 Veni Vidi Vici (record dell'albo d'onore).
 NON_REVOCABLE_BADGES = {6, 7, 8, 9}
 
-# Lista dei badge da inserire nel database all'avvio
-# Formato: (id, nome, descrizione, icona, valore_controllo)
-INITIAL_BADGES = [
-    # Badge basati sull'attività
-    (1, 'Chiacchierone', 'Invia un totale di 100 messaggi.', '💬', 100),
-    (2, 'Veterano Vocale', 'Accumula 50 ore totali nei canali vocali.', '🎙️', 50 * 3600), # 50 ore in secondi
-    (3, 'Notturno', 'Accumula 10 ore in vocale tra mezzanotte e le 05:00 del mattino.', '🦉', 10 * 3600),
-    (4, 'Re delle Reazioni', 'Assegna un totale di 50 reazioni ai messaggi.', '✨', 50),
-    # Badge basati sui traguardi
-    (5, 'Maestro di Livello', 'Raggiungi il livello 25.', '🏆', 25),
-    (6, 'Pioniere', 'Essere uno dei primi 10 membri ad aver interagito col bot.', '🚀', 10),
-    (7, 'Sostenitore', 'Aver effettuato una donazione.', '☕', None), # Manuale
-    # Badge basati su record e strisce
-    (8, 'Maratoneta Vocale', 'Avere la sessione vocale ininterrotta più lunga del server.', '⏳', None), # Record
-    (9, 'Super Sayan', 'Stabilire il record per il maggior numero di XP guadagnati in un solo giorno.', '⚡', None), # Record
-    (10, 'Instancabile', 'Mantenere una striscia di attività (XP guadagnati) per 7 giorni di fila.', '🔥', 7),
-    # Nuovi Badge
-    (11, 'Veterano', 'Membro del server da almeno 1 anno.', '💎', 365), # Giorni
-    (12, 'Faccia a Faccia', 'Usa la webcam in vocale per almeno 5 ore totali.', '📹', 5 * 3600),
-    (13, 'Regista', 'Trasmetti in streaming (Go Live) per almeno 10 ore totali.', '🎥', 10 * 3600),
-    # Badge di livello avanzato (tier superiori)
-    (14, 'Guardiano Notturno', 'Accumula 50 ore in vocale tra mezzanotte e le 05:00.', '🌙', 50 * 3600),
-    (15, 'Oratore', 'Invia un totale di 1000 messaggi.', '🗣️', 1000),
-    (16, 'Leggenda', 'Raggiungi il livello 50.', '⭐', 50),
-    (17, 'Inarrestabile', 'Mantieni una striscia di attività (XP guadagnati) per 30 giorni di fila.', '💪', 30)
-]
+# I badge (nomi, descrizioni, icone) sono definiti nel tema del server.
+INITIAL_BADGES = theme.BADGES
 
 class Badges(commands.Cog):
     """
@@ -95,15 +72,16 @@ class Badges(commands.Cog):
                     return
 
                 embed = discord.Embed(
-                    title="🏅 Nuovo Badge Ottenuto!",
-                    description=f"Congratulazioni, hai sbloccato il badge **{name}**!",
-                    color=self.bot.PRIMARY_COLOR
+                    title=theme.BADGE_DM_TITLE,
+                    description=theme.BADGE_DM_TEXT.format(name=name),
+                    color=theme.COLOR_GOLD
                 )
                 embed.add_field(name=f"{icon} {name}", value=description)
                 embed.set_thumbnail(url=user.display_avatar.url)
                 
                 if self.bot.KOFI_USERNAME:
-                    embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{self.bot.KOFI_USERNAME})", inline=False)
+                    embed.add_field(name=theme.KOFI_FIELD_NAME, value=theme.kofi_link(self.bot.KOFI_USERNAME), inline=False)
+                embed.set_footer(text=theme.FOOTER)
 
                 await user.send(embed=embed)
 
@@ -132,11 +110,11 @@ class Badges(commands.Cog):
             user_badges = self.bot.cursor.fetchall()
 
             if not user_badges:
-                await ctx.send(f"{target_user.display_name} non ha ancora guadagnato nessun badge.")
+                await ctx.send(theme.NO_BADGES_USER.format(name=target_user.display_name))
                 return
 
             embed = discord.Embed(
-                title=f"🏅 Badge di {target_user.display_name}",
+                title=f"🏅 I traguardi di {target_user.display_name}",
                 color=self.bot.PRIMARY_COLOR
             )
             embed.set_thumbnail(url=target_user.display_avatar.url)
@@ -149,7 +127,8 @@ class Badges(commands.Cog):
                 )
             
             if self.bot.KOFI_USERNAME:
-                embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{self.bot.KOFI_USERNAME})", inline=False)
+                embed.add_field(name=theme.KOFI_FIELD_NAME, value=theme.kofi_link(self.bot.KOFI_USERNAME), inline=False)
+            embed.set_footer(text=theme.FOOTER)
 
             await ctx.send(embed=embed)
 
@@ -161,7 +140,7 @@ class Badges(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def assign_badge(self, ctx, member: discord.Member, badge_id: int):
         """
-        Comando amministrativo per assegnare manualmente un badge (es. Sostenitore).
+        Comando amministrativo per assegnare manualmente un badge (es. Mecenate).
         """
         try:
             # Verifica se il badge esiste

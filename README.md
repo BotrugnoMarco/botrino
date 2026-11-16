@@ -26,6 +26,7 @@ A Discord bot for community engagement: XP and levels, voice activity tracking, 
 - **Reports**: a daily voice activity report (last 24 hours, at 09:00) and a weekly one (Monday at 10:00), including the most active channels and soundboard usage.
 - **Automatic AFK**: users who stay muted longer than a set timeout are moved to the AFK channel.
 - **Welcome messages** for new members.
+- **Server theme** in a single file (`theme.py`): badge names and descriptions, texts, titles and colours. The current theme is the *Thermopolium*, a Pompeian street counter, with Botrino as the Automaton.
 
 ## Commands
 
@@ -57,8 +58,7 @@ They require the *Administrator* permission.
 | `!force_check_badges [@user]` | Forces a badge check for a user |
 | `!ricalcola_badge [conferma]` | Syncs the badges of all users (awards missing ones, revokes those no longer earned) |
 | `!say #channel <message>` | Makes the bot send a message in a channel |
-| `!annuncio_v3 [#channel]` | Publishes the v3.0 update announcement |
-| `!announce_updates` | Publishes the latest updates in the updates channel (hidden) |
+| `!annuncio_thermopolium [#channel]` | Publishes the announcement of the server's new identity |
 
 ### Owner commands (hidden)
 
@@ -144,6 +144,7 @@ Tests also run on GitHub Actions on every push and pull request.
 ```
 botrino/
 ├── bot.py                  # Entry point: configuration, startup and shutdown
+├── theme.py                # Theme: user-facing texts, badges and colours
 ├── queries.py              # SQL queries
 ├── setup.sql               # Database schema
 ├── botctl.sh               # Production management script

@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 from datetime import datetime, timedelta, time
 import logging
 import queries
+import theme
 from utils.formatters import send_report_embed, build_records_embed
 
 def merge_intervals(intervals: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
@@ -212,7 +213,7 @@ class ScheduledTasks(commands.Cog):
         end_date = datetime.now(self.bot.BOT_TZ)
         start_date = end_date - timedelta(days=1)
         
-        await generate_report(self.bot, channel, "Report Ultime 24 Ore", start_date, end_date)
+        await generate_report(self.bot, channel, theme.REPORT_DAILY_TITLE, start_date, end_date)
 
     @tasks.loop()
     async def weekly_report(self):
@@ -238,7 +239,7 @@ class ScheduledTasks(commands.Cog):
         start_date = datetime.combine(start_of_last_week, time.min, tzinfo=self.bot.BOT_TZ)
         end_date = datetime.combine(end_of_last_week, time.min, tzinfo=self.bot.BOT_TZ)
 
-        await generate_report(self.bot, channel, "Report Settimanale", start_date, end_date)
+        await generate_report(self.bot, channel, theme.REPORT_WEEKLY_TITLE, start_date, end_date)
 
         # Dopo il report settimanale, mostra anche la Hall of Fame dei record del server.
         try:

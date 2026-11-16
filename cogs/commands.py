@@ -6,6 +6,7 @@ from discord.ext import commands
 from datetime import datetime, timedelta
 import logging
 import queries
+import theme
 from utils.formatters import format_duration, format_leaderboard, build_records_embed, get_effective_streak
 from cogs.tasks import generate_report
 from utils.xp_utils import calculate_xp_for_level_up
@@ -26,7 +27,7 @@ class UserCommands(commands.Cog):
         try:
             end_date = datetime.now(self.bot.BOT_TZ)
             start_date = end_date - timedelta(days=1)
-            await generate_report(self.bot, ctx.channel, "Report Ultime 24 Ore", start_date, end_date)
+            await generate_report(self.bot, ctx.channel, theme.REPORT_DAILY_TITLE, start_date, end_date)
         except Exception as e:
             logging.error(f"Errore nel comando report: {e}", exc_info=True)
             await ctx.send("Si è verificato un errore durante la generazione del report.")
@@ -69,12 +70,13 @@ class UserCommands(commands.Cog):
             
             # Ordina i dati finali e formatta l'embed
             final_rows = sorted(leaderboard_data.values(), key=lambda x: x['total_secs'], reverse=True)
-            embed = discord.Embed(title="🏆 Classifica Generale - Top 10 (Tempo Vocale)", color=self.bot.PRIMARY_COLOR)
+            embed = discord.Embed(title=theme.LEADERBOARD_VOICE_TITLE, color=self.bot.PRIMARY_COLOR)
             embed.description = format_leaderboard(final_rows[:10], lambda row: f"Tempo totale: **{format_duration(row['total_secs'])}**")
             
             if self.bot.KOFI_USERNAME:
-                embed.description += f"\n\n[☕ Supporta il bot](https://ko-fi.com/{self.bot.KOFI_USERNAME})"
-            
+                embed.description += f"\n\n{theme.kofi_link(self.bot.KOFI_USERNAME)}"
+            embed.set_footer(text=theme.FOOTER)
+
             await ctx.send(embed=embed)
         except Exception as e:
             logging.error(f"Errore nel comando leaderboard: {e}", exc_info=True)
@@ -94,22 +96,23 @@ class UserCommands(commands.Cog):
                 xp, lvl = user_data['xp'], user_data['level']
                 xp_needed = calculate_xp_for_level_up(lvl, self.bot.BASE_XP_FOR_LEVEL_UP)
                 
-                embed = discord.Embed(title=f"🏅 Livello di {target_user.display_name}", color=self.bot.PRIMARY_COLOR)
+                embed = discord.Embed(title=theme.LEVEL_TITLE.format(name=target_user.display_name), color=self.bot.PRIMARY_COLOR)
                 embed.set_thumbnail(url=target_user.display_avatar.url)
                 embed.add_field(name="Livello", value=f"**{lvl}**", inline=True)
                 embed.add_field(name="XP", value=f"**{xp}/{xp_needed}**", inline=True)
 
                 # Barra di progresso
                 progress = min(xp / xp_needed, 1.0) if xp_needed > 0 else 1.0
-                bar = "🟩" * int(progress * 20) + "⬜" * (20 - int(progress * 20))
-                embed.add_field(name="Progresso", value=f"`{bar}`", inline=False)
+                bar = theme.progress_bar(progress, 12)
+                embed.add_field(name="Progresso", value=bar, inline=False)
                 
                 if self.bot.KOFI_USERNAME:
-                    embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{self.bot.KOFI_USERNAME})", inline=False)
+                    embed.add_field(name=theme.KOFI_FIELD_NAME, value=theme.kofi_link(self.bot.KOFI_USERNAME), inline=False)
+                embed.set_footer(text=theme.FOOTER)
 
                 await ctx.send(embed=embed)
             else:
-                await ctx.send(f"L'utente {target_user.display_name} non ha ancora guadagnato XP.")
+                await ctx.send(f"{target_user.display_name} non ha ancora guadagnato XP al Thermopolium.")
         except Exception as e:
             logging.error(f"Errore nel comando level: {e}", exc_info=True)
             await ctx.send("Si è verificato un errore.")
@@ -123,11 +126,12 @@ class UserCommands(commands.Cog):
             self.bot.cursor.execute(queries.level_leaderboard_query)
             rows = self.bot.cursor.fetchall()
             
-            embed = discord.Embed(title="🏆 Classifica Livelli del Server", description="I 10 utenti con più esperienza.", color=self.bot.PRIMARY_COLOR)
+            embed = discord.Embed(title=theme.LEADERBOARD_LEVEL_TITLE, color=theme.COLOR_GOLD)
             embed.description = format_leaderboard(rows, lambda row: f"Livello: **{row['level']}** (XP: {row['xp']})")
             
             if self.bot.KOFI_USERNAME:
-                embed.description += f"\n\n[☕ Supporta il bot](https://ko-fi.com/{self.bot.KOFI_USERNAME})"
+                embed.description += f"\n\n{theme.kofi_link(self.bot.KOFI_USERNAME)}"
+            embed.set_footer(text=theme.FOOTER)
 
             await ctx.send(embed=embed)
         except Exception as e:
@@ -146,81 +150,63 @@ class UserCommands(commands.Cog):
             logging.error(f"Errore nel comando records: {e}", exc_info=True)
             await ctx.send("Si è verificato un errore durante il recupero dei record.")
 
-    @commands.command(name='annuncio_v3', help="(Admin) Pubblica l'annuncio di aggiornamento Bot v3.0.")
+    @commands.command(name='annuncio_thermopolium', help="(Admin) Pubblica l'annuncio dell'apertura del Thermopolium.")
     @commands.has_permissions(administrator=True)
-    async def annuncio_v3(self, ctx, channel: discord.TextChannel = None):
+    async def annuncio_thermopolium(self, ctx, channel: discord.TextChannel = None):
         """
-        Fa pubblicare al bot l'annuncio dell'aggiornamento v3.0.
+        Fa pubblicare al bot l'annuncio della nuova identità del server.
         Senza argomenti lo invia nel canale corrente; opzionalmente in un canale indicato.
         """
         target = channel or ctx.channel
         try:
             embed = discord.Embed(
-                title="🍻 Parola dell'Oste — Aggiornamento v3.0",
+                title="🍷 Salve a tutti: il Thermopolium apre i battenti!",
                 description=(
-                    "Avvicinatevi al bancone, avventori! Ho passato la notte a lucidare i boccali "
-                    "e a riordinare la cantina. Ecco cosa vi ho preparato nella mia taverna…"
+                    "Il vecchio pub ha chiuso e al suo posto c'è un bancone di Pompei. "
+                    "Stessa compagnia, stesse sere fino a tardi, un'insegna nuova. "
+                    "Io sono Botrino, l'Automa costruito dall'Oste per servire al bancone: "
+                    "vi verso una calda e vi racconto cosa è cambiato."
                 ),
                 color=self.bot.PRIMARY_COLOR
             )
             embed.add_field(
-                name="🏅 Nuove Onorificenze",
+                name="🏛️ I gradi",
                 value=(
-                    "Ho coniato quattro medaglie per i miei avventori più meritevoli:\n"
-                    "🌙 **Guardiano Notturno** — 50 ore a tenermi compagnia tra mezzanotte e le 05:00\n"
-                    "🗣️ **Oratore** — 1000 messaggi lasciati sul mio bancone\n"
-                    "⭐ **Leggenda** — quando raggiungete il livello 50\n"
-                    "💪 **Inarrestabile** — 30 giorni di fila senza mai saltare un giro"
+                    " → ".join(theme.RANKS) + "\n"
+                    "Si sale parlando, stando in vocale e reagendo ai messaggi. "
+                    "Chi aveva già un grado lo conserva: è cambiato solo il nome."
                 ),
                 inline=False
             )
             embed.add_field(
-                name="🏆 L'Albo dei Campioni — `!records`",
+                name="🏅 I traguardi",
                 value=(
-                    "Sul muro dietro il bancone ho appeso nuovi primati da spodestare:\n"
-                    "🦉 **Re della Notte** — chi mi tiene più compagnia nelle ore piccole\n"
-                    "🎙️ **Signore del Vocale** — chi passa più tempo nelle mie sale\n"
-                    "💬 **Messaggero Supremo** — chi più chiacchiera al bancone\n"
-                    "🔥 **Streak Record** — la frequentazione più lunga di sempre\n\n"
-                    "E ogni settimana, dopo il resoconto, vi mostrerò io stesso chi comanda l'albo!"
+                    "I badge hanno nomi nuovi, dalla 💬 **Voce del Foro** al 🔥 **Fuoco di Vesta**, "
+                    "ma quelli che avete già guadagnato restano vostri. Li trovate con `!badges` e nel `!profile`."
                 ),
                 inline=False
             )
             embed.add_field(
-                name="🦉 Le ore piccole contano di più",
+                name="🏺 Le sale",
                 value=(
-                    "Ora segno le vostre veglie a partire dalla **mezzanotte** (00:00 → 05:00). "
-                    "E ho tappato una falla: prima perdevo il conto di quasi tutte le ore piccole "
-                    "delle nottate più lunghe — adesso annoto tutto sul registro, boccale dopo boccale."
+                    "🛋️ il **Triclinio** per stare insieme, 🎲 i **Tavoli** dei Dadi e delle Tessere per giocare, "
+                    "📚 la **Biblioteca** per studiare e 🏟️ il **Colosseo** per guardare le partite insieme."
                 ),
                 inline=False
             )
             embed.add_field(
-                name="🔥 Il registro delle presenze non mente più",
+                name="📜 Il registro",
                 value=(
-                    "Se saltate un giro, la vostra striscia riparte da zero: niente più conti "
-                    "gonfiati sul mio quaderno."
-                ),
-                inline=False
-            )
-            embed.add_field(
-                name="🧹 Ho fatto pulizia",
-                value=(
-                    "Ho spolverato i vecchi registri e rifatto due conti: qualche numero "
-                    "(ore piccole, record di XP in un giorno) potrebbe risultarvi diverso. "
-                    "È tutto in ordine, parola d'Oste."
+                    "Ogni mattina pubblico l'**Acta Diurna** con le ultime 24 ore e ogni lunedì il registro della settimana. "
+                    "I primati migliori finiscono sull'**Albo d'Onore**: `!records`."
                 ),
                 inline=False
             )
 
             if self.bot.KOFI_USERNAME:
-                embed.add_field(
-                    name="☕ Offrite da bere all'Oste",
-                    value=f"[Offritemi un boccale](https://ko-fi.com/{self.bot.KOFI_USERNAME})",
-                    inline=False
-                )
+                embed.add_field(name=theme.KOFI_FIELD_NAME, value=theme.kofi_link(self.bot.KOFI_USERNAME), inline=False)
 
-            embed.set_footer(text="Il vostro Oste • Botrino v3.0 — Salute! 🍺")
+            embed.set_footer(text=f"L'Oste e {theme.BOT_TITLE}")
             embed.timestamp = discord.utils.utcnow()
 
             await target.send(embed=embed)
@@ -229,7 +215,7 @@ class UserCommands(commands.Cog):
         except discord.Forbidden:
             await ctx.send(f"❌ Non ho i permessi per scrivere in {target.mention}.")
         except Exception as e:
-            logging.error(f"Errore nel comando annuncio_v3: {e}", exc_info=True)
+            logging.error(f"Errore nel comando annuncio_thermopolium: {e}", exc_info=True)
             await ctx.send("Si è verificato un errore durante la pubblicazione dell'annuncio.")
 
     @commands.command(name='profile', help="Mostra il profilo completo di un utente.")
@@ -258,39 +244,39 @@ class UserCommands(commands.Cog):
             self.bot.cursor.execute(queries.get_record_daily_xp_query)
             xp_record = self.bot.cursor.fetchone()
             if xp_record and xp_record['id'] == target_user.id and xp_record['max_daily_xp'] > 0:
-                records_held.append(f"⚡ **Max XP Giornaliero** ({xp_record['max_daily_xp']} XP)")
+                records_held.append(f"{theme.RECORD_DAILY_XP}: **{xp_record['max_daily_xp']} XP** in un giorno")
 
             # Record Sessione Vocale
             self.bot.cursor.execute(queries.get_record_voice_duration_query)
             voice_record = self.bot.cursor.fetchone()
             if voice_record and voice_record['id'] == target_user.id and voice_record['duration_seconds'] > 0:
                 duration_str = format_duration(voice_record['duration_seconds'])
-                records_held.append(f"⏳ **Sessione più lunga** ({duration_str})")
+                records_held.append(f"{theme.RECORD_LONGEST_SESSION}: sessione di **{duration_str}**")
 
             # Calcoli per la barra XP
             xp, lvl = user_stats['xp'], user_stats['level']
             xp_needed = calculate_xp_for_level_up(lvl, self.bot.BASE_XP_FOR_LEVEL_UP)
             progress = min(xp / xp_needed, 1.0) if xp_needed > 0 else 1.0
-            bar = "🟩" * int(progress * 10) + "⬜" * (10 - int(progress * 10))
+            bar = theme.progress_bar(progress, 10)
 
             # Formattazione dati
             voice_time = format_duration(user_stats['voice_seconds'])
             night_time = format_duration(user_stats['night_voice_seconds'])
-            badges_str = " ".join([f"{b['icon']} **{b['name']}**" for b in user_badges]) if user_badges else "Nessun badge guadagnato."
+            badges_str = " ".join([f"{b['icon']} **{b['name']}**" for b in user_badges]) if user_badges else theme.NO_BADGES
 
-            embed = discord.Embed(title=f"👤 Profilo di {target_user.display_name}", color=self.bot.PRIMARY_COLOR)
+            embed = discord.Embed(title=theme.PROFILE_TITLE.format(name=target_user.display_name), color=self.bot.PRIMARY_COLOR)
             embed.set_thumbnail(url=target_user.display_avatar.url)
             
             # Sezione Livello
-            embed.add_field(name="🏆 Livello & XP", value=f"Livello: **{lvl}**\nXP: **{xp}/{xp_needed}**\n`{bar}`", inline=False)
+            embed.add_field(name="🏛️ Livello e XP", value=f"Livello: **{lvl}**\nXP: **{xp}/{xp_needed}**\n{bar}", inline=False)
             
             # Sezione Statistiche Generali
             stats_desc = (
                 f"💬 Messaggi: **{user_stats['message_count']}**\n"
                 f"✨ Reazioni: **{user_stats['reaction_count']}**\n"
-                f"🎙️ Tempo in Vocale: **{voice_time}**"
+                f"🛋️ Tempo in vocale: **{voice_time}**"
             )
-            embed.add_field(name="📊 Statistiche Attività", value=stats_desc, inline=True)
+            embed.add_field(name="📊 Attività", value=stats_desc, inline=True)
 
             # Sezione Statistiche Avanzate
             # Streak "effettiva": il valore memorizzato si aggiorna solo con l'attività,
@@ -300,23 +286,23 @@ class UserCommands(commands.Cog):
                 user_stats['activity_streak'], user_stats['last_activity_date'], today
             )
             adv_stats_desc = (
-                f"🔥 Streak Attuale: **{current_streak} giorni**\n"
-                f"⚡ Record XP Giornaliero: **{user_stats['max_daily_xp']}**\n"
-                f"🦉 Tempo Notturno: **{night_time}**"
+                f"🔥 Giorni di fila: **{current_streak}**\n"
+                f"⚡ Miglior giornata: **{user_stats['max_daily_xp']} XP**\n"
+                f"🦉 Tempo notturno: **{night_time}**"
             )
-            embed.add_field(name="📈 Statistiche Avanzate", value=adv_stats_desc, inline=True)
+            embed.add_field(name="📈 Imprese", value=adv_stats_desc, inline=True)
 
             # Sezione Record
             if records_held:
-                embed.add_field(name="🏆 Record Detenuti", value="\n".join(records_held), inline=False)
+                embed.add_field(name="🏆 Sull'Albo d'Onore", value="\n".join(records_held), inline=False)
 
             # Sezione Badge
-            embed.add_field(name="🏅 Badge", value=badges_str, inline=False)
+            embed.add_field(name="🏅 Traguardi", value=badges_str, inline=False)
             
             if self.bot.KOFI_USERNAME:
-                embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{self.bot.KOFI_USERNAME})", inline=False)
-            
-            embed.set_footer(text=f"ID Utente: {target_user.id} • Membro dal: {target_user.joined_at.strftime('%d/%m/%Y')}")
+                embed.add_field(name=theme.KOFI_FIELD_NAME, value=theme.kofi_link(self.bot.KOFI_USERNAME), inline=False)
+
+            embed.set_footer(text=theme.PROFILE_JOINED.format(date=target_user.joined_at.strftime('%d/%m/%Y')))
 
             await ctx.send(embed=embed)
 
@@ -329,21 +315,18 @@ class UserCommands(commands.Cog):
         """
         Mostra un messaggio di aiuto con la lista di tutti i comandi disponibili.
         """
-        embed = discord.Embed(title="🤖 Comandi disponibili — Botrino", description="Ecco la lista completa dei comandi che puoi usare:", color=self.bot.PRIMARY_COLOR)
-        embed.add_field(name="`!report`", value="Mostra il report delle attività vocali delle ultime 24 ore.", inline=False)
-        embed.add_field(name="`!profile [utente]`", value="Visualizza il profilo completo con statistiche e badge.", inline=False)
-        embed.add_field(name="`!leaderboard`", value="Visualizza la classifica del tempo trascorso in vocale.", inline=False)
-        embed.add_field(name="`!level [utente]`", value="Mostra il livello e l'XP di un utente (o i tuoi).", inline=False)
-        embed.add_field(name="`!level_leaderboard`", value="Mostra la classifica dei livelli.", inline=False)
-        embed.add_field(name="`!records`", value="Mostra la Hall of Fame con i record del server.", inline=False)
-        embed.add_field(name="`!badges [utente]`", value="Mostra i badge guadagnati da un utente (o i tuoi).", inline=False)
-        embed.add_field(name="`!donate`", value="Mostra il link per supportare lo sviluppo del bot.", inline=False)
-        embed.add_field(name="`!help_botrino`", value="Mostra questo messaggio di aiuto.", inline=False)
-        
-        if self.bot.KOFI_USERNAME:
-            embed.add_field(name="Supporto", value=f"[☕ Offrimi un caffè](https://ko-fi.com/{self.bot.KOFI_USERNAME})", inline=False)
-        
-        embed.set_footer(text="Botrino — il tuo assistente del Drunken’s Server 🍻", icon_url=self.bot.user.display_avatar.url)
+        embed = discord.Embed(title=theme.HELP_TITLE, description=theme.HELP_TEXT, color=self.bot.PRIMARY_COLOR)
+        embed.add_field(name="`!profile [utente]`", value="La tavoletta con livello, imprese e traguardi.", inline=False)
+        embed.add_field(name="`!level [utente]`", value="Livello e XP, con la barra di avanzamento.", inline=False)
+        embed.add_field(name="`!badges [utente]`", value="I traguardi incisi sulla parete.", inline=False)
+        embed.add_field(name="`!records`", value="L'Albo d'Onore con i primati del Thermopolium.", inline=False)
+        embed.add_field(name="`!leaderboard`", value="I più assidui: classifica del tempo in vocale.", inline=False)
+        embed.add_field(name="`!level_leaderboard`", value="Le stelle del Thermopolium: classifica dei livelli.", inline=False)
+        embed.add_field(name="`!report`", value="L'Acta Diurna: l'attività vocale delle ultime 24 ore.", inline=False)
+        embed.add_field(name="`!donate`", value="Offri una calda all'Automa.", inline=False)
+        embed.add_field(name="`!help_botrino`", value="Questo elenco.", inline=False)
+
+        embed.set_footer(text=theme.FOOTER, icon_url=self.bot.user.display_avatar.url)
         await ctx.send(embed=embed)
 
     @commands.command(name='donate', help='Mostra il link per supportare il bot.')
@@ -352,107 +335,20 @@ class UserCommands(commands.Cog):
         Mostra un embed con il link per effettuare una donazione su Ko-fi.
         """
         kofi_username = self.bot.KOFI_USERNAME
-        
+
         if not kofi_username:
             await ctx.send("Il link per la donazione non è stato configurato. Contatta un amministratore.")
             return
 
         embed = discord.Embed(
-            title="☕ Supporta lo Sviluppo!",
-            description=f"Se apprezzi il mio lavoro e vuoi supportare lo sviluppo del bot, puoi offrirmi un caffè su Ko-fi!\n\n"
-                        f"Ogni contributo è molto apprezzato e mi aiuta a mantenere il bot attivo e aggiornato.\n\n"
-                        f"➡️ [**Dona su Ko-fi**](https://ko-fi.com/{kofi_username})",
-            color=self.bot.PRIMARY_COLOR
+            title=theme.DONATE_TITLE,
+            description=f"{theme.DONATE_TEXT}\n\n➡️ [**Dona su Ko-fi**]({theme.kofi_url(kofi_username)})",
+            color=theme.COLOR_GOLD
         )
         embed.set_thumbnail(url="https://storage.ko-fi.com/cdn/cup-border.png")
-        embed.set_footer(text="Grazie di cuore per il tuo supporto!")
-        
+        embed.set_footer(text=theme.DONATE_FOOTER)
+
         await ctx.send(embed=embed)
-
-    @commands.command(name='announce_updates', hidden=True)
-    @commands.has_permissions(administrator=True)
-    async def announce_updates(self, ctx):
-        """
-        Invia un messaggio di annuncio con gli ultimi aggiornamenti nel canale configurato.
-        """
-        if not self.bot.UPDATES_CHANNEL_ID:
-            await ctx.send("❌ Canale aggiornamenti non configurato. Aggiungi `UPDATES_CHANNEL_ID` al file .env.")
-            return
-
-        channel = self.bot.get_channel(self.bot.UPDATES_CHANNEL_ID)
-        if not channel:
-            await ctx.send("❌ Canale aggiornamenti non trovato.")
-            return
-
-        embed = discord.Embed(
-            title="🚀 Aggiornamento Bot v2.0 - Badge, Profili e Streaming!",
-            description="Siamo lieti di annunciare un grande aggiornamento per il bot! Ecco le novità:",
-            color=self.bot.PRIMARY_COLOR
-        )
-
-        # Nuovi Comandi
-        embed.add_field(
-            name="🆕 Nuovi Comandi",
-            value=(
-                "**`!profile`**: Visualizza la tua scheda personale con livello, XP e badge.\n"
-                "**`!records`**: Scopri i record attuali del server da battere (XP e Vocale)!"
-            ),
-            inline=False
-        )
-
-        # Lista Completa Badge
-        embed.add_field(
-            name="🏅 Lista Completa Badge",
-            value=(
-                "Ecco tutti i badge che puoi sbloccare:\n\n"
-                "💬 **Chiacchierone**: Invia 100 messaggi.\n"
-                "🎙️ **Veterano Vocale**: 50 ore in vocale.\n"
-                "🦉 **Notturno**: 10 ore in vocale di notte (00-05).\n"
-                "✨ **Re delle Reazioni**: Dai 50 reazioni.\n"
-                "🏆 **Maestro di Livello**: Raggiungi il livello 25.\n"
-                "🚀 **Pioniere**: Primi 10 utenti del bot.\n"
-                "☕ **Sostenitore**: Effettua una donazione.\n"
-                "⏳ **Maratoneta Vocale**: Record sessione più lunga.\n"
-                "⚡ **Super Sayan**: Record XP giornaliero.\n"
-                "🔥 **Instancabile**: Striscia attività di 7 giorni.\n"
-                "💎 **Veterano**: Nel server da 1 anno.\n"
-                "📹 **Faccia a Faccia**: 5 ore di webcam.\n"
-                "🎥 **Regista**: 10 ore di streaming.\n"
-                "🌙 **Guardiano Notturno**: 50 ore in vocale di notte.\n"
-                "🗣️ **Oratore**: Invia 1000 messaggi.\n"
-                "⭐ **Leggenda**: Raggiungi il livello 50.\n"
-                "💪 **Inarrestabile**: Striscia attività di 30 giorni."
-            ),
-            inline=False
-        )
-
-        # Miglioramenti Tecnici
-        embed.add_field(
-            name="🛠️ Miglioramenti e Fix",
-            value=(
-                "• **Tracking Video & Stream**: Ora il bot traccia il tempo passato in video e streaming.\n"
-                "• **Fix Sessioni**: Risolti problemi con il cambio canale e il reset delle strisce giornaliere.\n"
-                "• **Link Supporto**: Aggiunto link Ko-fi per chi vuole supportare il progetto."
-            ),
-            inline=False
-        )
-
-        # Footer con link donazione
-        if self.bot.KOFI_USERNAME:
-            embed.add_field(
-                name="☕ Supportaci",
-                value=f"[Offrimi un caffè su Ko-fi](https://ko-fi.com/{self.bot.KOFI_USERNAME})",
-                inline=False
-            )
-
-        embed.set_footer(text="Grazie per far parte della nostra community!")
-        embed.timestamp = datetime.now(self.bot.BOT_TZ)
-
-        try:
-            await channel.send(embed=embed)
-            await ctx.send(f"✅ Annuncio inviato con successo nel canale {channel.mention}.")
-        except Exception as e:
-            await ctx.send(f"❌ Errore durante l'invio dell'annuncio: {e}")
 
     @commands.command(name='say', help="Fa inviare un messaggio al bot in un canale specifico.")
     @commands.has_permissions(administrator=True)
