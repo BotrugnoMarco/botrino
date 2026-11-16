@@ -40,7 +40,7 @@ leaderboard_query = """
 
 # Query per la classifica basata sul livello e l'XP.
 level_leaderboard_query = """
-    SELECT user_id, username, nickname, level, xp
+    SELECT id AS user_id, username, nickname, level, xp
     FROM users
     ORDER BY level DESC, xp DESC
     LIMIT 10;
